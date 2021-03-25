@@ -1,0 +1,1911 @@
+import re
+import pygame
+import time
+from math import radians, sin, cos, atan2, degrees, sqrt, ceil
+
+ANCHORS = {
+    'x': {
+        'left': 0.0,
+        'center': 0.5,
+        'middle': 0.5,
+        'right': 1.0,
+    },
+    'y': {
+        'top': 0.0,
+        'center': 0.5,
+        'middle': 0.5,
+        'bottom': 1.0,
+    }
+}
+
+SYMBOLIC_POSITIONS = set((
+    "topleft", "bottomleft", "topright", "bottomright",
+    "midtop", "midleft", "midbottom", "midright",
+    "center",
+))
+
+# Provides more meaningful default-arguments e.g. for display in IDEs etc.
+POS_TOPLEFT = None
+ANCHOR_CENTER = None
+
+MAX_ALPHA = 255  # Based on pygame's max alpha.
+
+DEPRECATED_KEY_RE = re.compile(r'[A-Z]')
+PREFIX_RE = re.compile(r'^K_(?!\d$)')
+
+DEFAULT_FONT_SIZE = 24
+REFERENCE_FONT_SIZE = 100
+DEFAULT_LINE_HEIGHT = 1.0
+DEFAULT_FONT_NAME = None
+FONT_NAME_TEMPLATE = "%s"
+DEFAULT_COLOR = "white"
+DEFAULT_BACKGROUND = None
+DEFAULT_OUTLINE_COLOR = "black"
+DEFAULT_SHADOW_COLOR = "black"
+OUTLINE_UNIT = 1 / 24
+SHADOW_UNIT = 1 / 18
+DEFAULT_ALIGN = "left"  # left, center, or right
+DEFAULT_ANCHOR = 0, 0  # 0, 0 = top left ;  1, 1 = bottom right
+DEFAULT_STRIP = True
+ALPHA_RESOLUTION = 16
+ANGLE_RESOLUTION_DEGREES = 3
+
+AUTO_CLEAN = True
+MEMORY_LIMIT_MB = 64
+MEMORY_REDUCTION_FACTOR = 0.5
+
+pygame.font.init()
+
+_font_cache = {}
+
+
+# =====================================HEAPQ
+class HeapqPartial:
+    # Код взят из https://github.com/python/cpython/blob/2d1cbe4193499914ccc9d217ea63eb17ff927c91/Lib/heapq.py#L258
+    # Поскольку heapq не портирован в Sculpt
+    def heapify(self, x):
+        """Transform list into a heap, in-place, in O(len(x)) time."""
+        n = len(x)
+        # Transform bottom-up.  The largest index there's any point to looking at
+        # is the largest with a child index in-range, so must have 2*i + 1 < n,
+        # or i < (n-1)/2.  If n is even = 2*j, this is (2*j-1)/2 = j-1/2 so
+        # j-1 is the largest, which is n//2 - 1.  If n is odd = 2*j+1, this is
+        # (2*j+1-1)/2 = j so j-1 is the largest, and that's again n//2-1.
+        # Выглядит уродливо, но reversed на платформе не работает
+        for i in range((n//2)-1, -1, -1):
+            self._siftup(x, i)
+
+    def heappop(self, heap):
+        """Pop the smallest item off the heap, maintaining the heap invariant."""
+        lastelt = heap.pop()    # raises appropriate IndexError if heap is empty
+        if heap:
+            returnitem = heap[0]
+            heap[0] = lastelt
+            self._siftup(heap, 0)
+            return returnitem
+        return lastelt
+
+    def _siftup(self, heap, pos):
+        endpos = len(heap)
+        startpos = pos
+        newitem = heap[pos]
+        # Bubble up the smaller child until hitting a leaf.
+        childpos = 2*pos + 1    # leftmost child position
+        while childpos < endpos:
+            # Set childpos to index of smaller child.
+            rightpos = childpos + 1
+            if rightpos < endpos and not heap[childpos] < heap[rightpos]:
+                childpos = rightpos
+            # Move the smaller child up.
+            heap[pos] = heap[childpos]
+            pos = childpos
+            childpos = 2*pos + 1
+        # The leaf at pos is empty now.  Put newitem there, and bubble it up
+        # to its final resting place (by sifting its parents down).
+        heap[pos] = newitem
+        self._siftdown(heap, startpos, pos)
+
+    def _siftdown(self, heap, startpos, pos):
+        newitem = heap[pos]
+        # Follow the path to the root, moving parents down until finding a place
+        # newitem fits.
+        while pos > startpos:
+            parentpos = (pos - 1) >> 1
+            parent = heap[parentpos]
+            if newitem < parent:
+                heap[pos] = parent
+                pos = parentpos
+                continue
+            break
+        heap[pos] = newitem
+
+    def heappush(self, heap, item):
+        """Push item onto heap, maintaining the heap invariant."""
+        heap.append(item)
+        self._siftdown(heap, 0, len(heap)-1)
+
+heapq = HeapqPartial()
+# -------------------------------LOADERS------------------------------------------------------------
+class ImageLoader:
+
+    def __init__(self):
+        self._cache = {}
+
+    EXTNS = ['png', 'gif', 'jpg', 'jpeg', 'bmp']
+    TYPE = 'image'
+
+    def _load(self, path):
+        return pygame.image.load(path).convert_alpha()
+
+    def __repr__(self):
+        return "<Images images={}>".format(self.__dir__())
+
+    def cache_key(self, name, args, kwargs):
+        kwpairs = sorted(kwargs.items())
+        return (name, args, tuple(kwpairs))
+
+    def unload(self, name, *args, **kwargs):
+        key = self.cache_key(name, args, kwargs)
+        if key in self._cache:
+            del self._cache[key]
+
+    def unload_all(self):
+        self._cache.clear()
+
+    def load(self, name, *args, **kwargs):
+        key = self.cache_key(name, args, kwargs)
+        if key in self._cache:
+            return self._cache[key]
+
+        for ext in self.EXTNS:
+            pass
+
+
+def getfont(fontname=None, fontsize=None, sysfontname=None,
+            bold=None, italic=None, underline=None):
+    if fontname is not None and sysfontname is not None:
+        raise ValueError("Can't set both fontname and sysfontname")
+    if fontname is None and sysfontname is None:
+        fontname = DEFAULT_FONT_NAME
+    if fontsize is None:
+        fontsize = DEFAULT_FONT_SIZE
+    key = fontname, fontsize, sysfontname, bold, italic, underline
+    if key in _font_cache:
+        return _font_cache[key]
+    if sysfontname is not None:
+        font = pygame.font.SysFont(
+            sysfontname, fontsize, bold or False, italic or False)
+    else:
+        if fontname is not None:
+            fontname = FONT_NAME_TEMPLATE % fontname
+        try:
+            font = pygame.font.Font(fontname, fontsize)
+        except IOError:
+            raise IOError("unable to read font filename: %s" % fontname)
+    if bold is not None:
+        font.set_bold(bold)
+    if italic is not None:
+        font.set_italic(italic)
+    if underline is not None:
+        font.set_underline(underline)
+    _font_cache[key] = font
+    return font
+
+
+def wrap(text, fontname=None, fontsize=None, sysfontname=None,
+         bold=None, italic=None, underline=None, width=None, widthem=None, strip=None):
+    if widthem is None:
+        font = getfont(fontname, fontsize, sysfontname,
+                       bold, italic, underline)
+    elif width is not None:
+        raise ValueError("Can't set both width and widthem")
+    else:
+        font = getfont(fontname, REFERENCE_FONT_SIZE,
+                       sysfontname, bold, italic, underline)
+        width = widthem * REFERENCE_FONT_SIZE
+    if strip is None:
+        strip = DEFAULT_STRIP
+    texts = text.replace("\t", "    ").split("\n")
+    lines = []
+    for text in texts:
+        if strip:
+            text = text.rstrip(" ")
+        if width is None:
+            lines.append(text)
+            continue
+        if not text:
+            lines.append("")
+            continue
+        # Preserve leading spaces in all cases.
+        a = len(text) - len(text.lstrip(" "))
+        # At any time, a is the rightmost known index you can legally split a line. I.e. it's legal
+        # to add text[:a] to lines, and line is what will be added to lines if
+        # text is split at a.
+        a = text.index(" ", a) if " " in text else len(text)
+        line = text[:a]
+        while a + 1 < len(text):
+            # b is the next legal place to break the line, with bline the
+            # corresponding line to add.
+            if " " not in text[a + 1:]:
+                b = len(text)
+                bline = text
+            elif strip:
+                # Lines may be split at any space character that immediately follows a non-space
+                # character.
+                b = text.index(" ", a + 1)
+                while text[b - 1] == " ":
+                    if " " in text[b + 1:]:
+                        b = text.index(" ", b + 1)
+                    else:
+                        b = len(text)
+                        break
+                bline = text[:b]
+            else:
+                # Lines may be split at any space character, or any character immediately following
+                # a space character.
+                b = a + 1 if text[a] == " " else text.index(" ", a + 1)
+            bline = text[:b]
+            if font.size(bline)[0] <= width:
+                a, line = b, bline
+            else:
+                lines.append(line)
+                text = text[a:].lstrip(" ") if strip else text[a:]
+                a = text.index(" ", 1) if " " in text[1:] else len(text)
+                line = text[:a]
+        if text:
+            lines.append(line)
+    return lines
+
+
+_fit_cache = {}
+
+
+def _fitsize(text, fontname, sysfontname, bold, italic, underline, width, height, lineheight, strip):
+    key = text, fontname, sysfontname, bold, italic, underline, width, height, lineheight, strip
+    if key in _fit_cache:
+        return _fit_cache[key]
+
+    def fits(fontsize):
+        texts = wrap(text, fontname, fontsize, sysfontname,
+                     bold, italic, underline, width, strip)
+        font = getfont(fontname, fontsize, sysfontname,
+                       bold, italic, underline)
+        w = max(font.size(line)[0] for line in texts)
+        linesize = font.get_linesize() * lineheight
+        h = int(round((len(texts) - 1) * linesize)) + font.get_height()
+        return w <= width and h <= height
+    a, b = 1, 256
+    if not fits(a):
+        fontsize = a
+    elif fits(b):
+        fontsize = b
+    else:
+        while b - a > 1:
+            c = (a + b) // 2
+            if fits(c):
+                a = c
+            else:
+                b = c
+        fontsize = a
+    _fit_cache[key] = fontsize
+    return fontsize
+
+
+def _resolvecolor(color, default):
+    if color is None:
+        color = default
+    if color is None:
+        return None
+    try:
+        return tuple(pygame.Color(color))
+    except ValueError:
+        return tuple(color)
+
+
+def _resolvealpha(alpha):
+    if alpha >= 1:
+        return 1
+    return max(int(round(alpha * ALPHA_RESOLUTION)) / ALPHA_RESOLUTION, 0)
+
+
+def _resolveangle(angle):
+    if not angle:
+        return 0
+    angle %= 360
+    return int(round(angle / ANGLE_RESOLUTION_DEGREES)) * ANGLE_RESOLUTION_DEGREES
+
+
+# Return the set of points in the circle radius r, using Bresenham's
+# circle algorithm
+_circle_cache = {}
+
+
+def _circlepoints(r):
+    r = int(round(r))
+    if r in _circle_cache:
+        return _circle_cache[r]
+    x, y, e = r, 0, 1 - r
+    _circle_cache[r] = points = []
+    while x >= y:
+        points.append((x, y))
+        y += 1
+        if e < 0:
+            e += 2 * y - 1
+        else:
+            x -= 1
+            e += 2 * (y - x) - 1
+    points += [(y, x) for x, y in points if x > y]
+    points += [(-x, y) for x, y in points if x]
+    points += [(x, -y) for x, y in points if y]
+    points.sort()
+    return points
+
+
+_surf_cache = {}
+_surf_tick_usage = {}
+_surf_size_total = 0
+_unrotated_size = {}
+_tick = 0
+
+
+def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, italic=None,
+            underline=None, width=None, widthem=None, strip=None, color=None,
+            background=None, antialias=True, ocolor=None, owidth=None, scolor=None, shadow=None,
+            gcolor=None, alpha=1.0, align=None, lineheight=None, angle=0, cache=True):
+    global _tick, _surf_size_total
+    if fontname is None:
+        fontname = DEFAULT_FONT_NAME
+    if fontsize is None:
+        fontsize = DEFAULT_FONT_SIZE
+    fontsize = int(round(fontsize))
+    if align is None:
+        align = DEFAULT_ALIGN
+    if align in ["left", "center", "right"]:
+        align = [0, 0.5, 1][["left", "center", "right"].index(align)]
+    if lineheight is None:
+        lineheight = DEFAULT_LINE_HEIGHT
+    color = _resolvecolor(color, DEFAULT_COLOR)
+    background = _resolvecolor(background, DEFAULT_BACKGROUND)
+    gcolor = _resolvecolor(gcolor, None)
+    ocolor = None if owidth is None else _resolvecolor(
+        ocolor, DEFAULT_OUTLINE_COLOR)
+    scolor = None if shadow is None else _resolvecolor(
+        scolor, DEFAULT_SHADOW_COLOR)
+    opx = None if owidth is None else ceil(owidth * fontsize * OUTLINE_UNIT)
+    spx = None if shadow is None else tuple(
+        ceil(s * fontsize * SHADOW_UNIT) for s in shadow)
+    alpha = _resolvealpha(alpha)
+    angle = _resolveangle(angle)
+    strip = DEFAULT_STRIP if strip is None else strip
+    key = (text, fontname, fontsize, sysfontname, bold, italic, underline, width, widthem, strip,
+           color, background, antialias, ocolor, opx, scolor, spx, gcolor, alpha, align, lineheight, angle)
+    if key in _surf_cache:
+        _surf_tick_usage[key] = _tick
+        _tick += 1
+        return _surf_cache[key]
+    texts = wrap(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                 width=width, widthem=widthem, strip=strip)
+    if angle:
+        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color, background, antialias,
+                        ocolor, owidth, scolor, shadow, gcolor, alpha, align, lineheight, cache=cache)
+        if angle in (90, 180, 270):
+            surf = pygame.transform.rotate(surf0, angle)
+        else:
+            surf = pygame.transform.rotozoom(surf0, angle, 1.0)
+        _unrotated_size[(surf.get_size(), angle, text)] = surf0.get_size()
+    elif alpha < 1.0:
+        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color, background, antialias,
+                        ocolor, owidth, scolor, shadow, gcolor=gcolor, align=align,
+                        lineheight=lineheight, cache=cache)
+        surf = surf0.copy()
+        array = pygame.surfarray.pixels_alpha(surf)
+        array[:, :] = (array[:, :] * alpha).astype(array.dtype)
+        del array
+    elif spx is not None:
+        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
+                        gcolor=gcolor, align=align, lineheight=lineheight, cache=cache)
+        ssurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color=scolor, background=(0, 0, 0, 0), antialias=antialias,
+                        align=align, lineheight=lineheight, cache=cache)
+        w0, h0 = surf0.get_size()
+        sx, sy = spx
+        surf = pygame.Surface((w0 + abs(sx), h0 + abs(sy))).convert_alpha()
+        surf.fill(background or (0, 0, 0, 0))
+        dx, dy = max(sx, 0), max(sy, 0)
+        surf.blit(ssurf, (dx, dy))
+        x0, y0 = abs(sx) - dx, abs(sy) - dy
+        if len(color) > 3 and color[3] == 0:
+            array = pygame.surfarray.pixels_alpha(surf)
+            array0 = pygame.surfarray.pixels_alpha(surf0)
+            array[x0:x0 + w0, y0:y0 +
+                  h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
+            del array, array0
+        else:
+            surf.blit(surf0, (x0, y0))
+    elif opx is not None:
+        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
+                        gcolor=gcolor, align=align, lineheight=lineheight, cache=cache)
+        osurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
+                        width, widthem, strip, color=ocolor, background=(0, 0, 0, 0), antialias=antialias,
+                        align=align, lineheight=lineheight, cache=cache)
+        w0, h0 = surf0.get_size()
+        surf = pygame.Surface((w0 + 2 * opx, h0 + 2 * opx)).convert_alpha()
+        surf.fill(background or (0, 0, 0, 0))
+        for dx, dy in _circlepoints(opx):
+            surf.blit(osurf, (dx + opx, dy + opx))
+        surf.blit(surf0, (opx, opx))
+    else:
+        font = getfont(fontname, fontsize, sysfontname,
+                       bold, italic, underline)
+        # pygame.Font.render does not allow passing None as an argument value
+        # for background.
+        if background is None or (len(background) > 3 and background[3] == 0) or gcolor is not None:
+            lsurfs = [font.render(text, antialias, color).convert_alpha()
+                      for text in texts]
+        else:
+            lsurfs = [font.render(text, antialias, color,
+                                  background).convert_alpha() for text in texts]
+        if gcolor is not None:
+            import numpy
+            for lsurf in lsurfs:
+                m = numpy.clip(numpy.arange(
+                    lsurf.get_height()) * 2.0 / font.get_ascent() - 1.0, 0, 1)
+                array = pygame.surfarray.pixels3d(lsurf)
+                for j in (0, 1, 2):
+                    array[:, :, j] = (
+                        (1.0 - m) * array[:, :, j] + m * gcolor[j]).astype(array.dtype)
+                del array
+
+        if len(lsurfs) == 1 and gcolor is None:
+            surf = lsurfs[0]
+        else:
+            w = max(lsurf.get_width() for lsurf in lsurfs)
+            linesize = font.get_linesize() * lineheight
+            ys = [int(round(k * linesize)) for k in range(len(lsurfs))]
+            h = ys[-1] + font.get_height()
+            surf = pygame.Surface((w, h)).convert_alpha()
+            surf.fill(background or (0, 0, 0, 0))
+            for y, lsurf in zip(ys, lsurfs):
+                x = int(round(align * (w - lsurf.get_width())))
+                surf.blit(lsurf, (x, y))
+    if cache:
+        w, h = surf.get_size()
+        _surf_size_total += 4 * w * h
+        _surf_cache[key] = surf
+        _surf_tick_usage[key] = _tick
+        _tick += 1
+    return surf
+
+
+_default_surf_sentinel = ()
+
+class Ptext:
+    def draw(self, text, pos=None,
+            fontname=None, fontsize=None, sysfontname=None,
+            antialias=True, bold=None, italic=None, underline=None,
+            color=None, background=None,
+            top=None, left=None, bottom=None, right=None,
+            topleft=None, bottomleft=None, topright=None, bottomright=None,
+            midtop=None, midleft=None, midbottom=None, midright=None,
+            center=None, centerx=None, centery=None,
+            width=None,	widthem=None, lineheight=None, strip=None,
+            align=None,
+            owidth=None, ocolor=None,
+            shadow=None, scolor=None,
+            gcolor=None,
+            alpha=1.0,
+            anchor=None,
+            angle=0,
+            surf=_default_surf_sentinel,
+            cache=True):
+
+        if topleft:
+            left, top = topleft
+        if bottomleft:
+            left, bottom = bottomleft
+        if topright:
+            right, top = topright
+        if bottomright:
+            right, bottom = bottomright
+        if midtop:
+            centerx, top = midtop
+        if midleft:
+            left, centery = midleft
+        if midbottom:
+            centerx, bottom = midbottom
+        if midright:
+            right, centery = midright
+        if center:
+            centerx, centery = center
+
+        x, y = pos or (None, None)
+        hanchor, vanchor = anchor or (None, None)
+        if left is not None:
+            x, hanchor = left, 0
+        if centerx is not None:
+            x, hanchor = centerx, 0.5
+        if right is not None:
+            x, hanchor = right, 1
+        if top is not None:
+            y, vanchor = top, 0
+        if centery is not None:
+            y, vanchor = centery, 0.5
+        if bottom is not None:
+            y, vanchor = bottom, 1
+        if x is None:
+            raise ValueError("Unable to determine horizontal position")
+        if y is None:
+            raise ValueError("Unable to determine vertical position")
+
+        if align is None:
+            align = hanchor
+        if hanchor is None:
+            hanchor = DEFAULT_ANCHOR[0]
+        if vanchor is None:
+            vanchor = DEFAULT_ANCHOR[1]
+
+        tsurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline, width, widthem,
+                        strip, color, background, antialias, ocolor, owidth, scolor, shadow, gcolor, alpha, align,
+                        lineheight, angle, cache)
+        angle = _resolveangle(angle)
+        if angle:
+            w0, h0 = _unrotated_size[(tsurf.get_size(), angle, text)]
+            S, C = sin(radians(angle)), cos(radians(angle))
+            dx, dy = (0.5 - hanchor) * w0, (0.5 - vanchor) * h0
+            x += dx * C + dy * S - 0.5 * tsurf.get_width()
+            y += -dx * S + dy * C - 0.5 * tsurf.get_height()
+        else:
+            x -= hanchor * tsurf.get_width()
+            y -= vanchor * tsurf.get_height()
+        x = int(round(x))
+        y = int(round(y))
+
+        if surf is _default_surf_sentinel:
+            surf = pygame.display.get_surface()
+        if surf is not None:
+            surf.blit(tsurf, (x, y))
+
+        if AUTO_CLEAN:
+            clean()
+
+        return tsurf, (x, y)
+
+
+    def drawbox(self, text, rect, fontname=None, sysfontname=None, lineheight=None, anchor=None,
+                bold=None, italic=None, underline=None, strip=None, **kwargs):
+        if fontname is None:
+            fontname = DEFAULT_FONT_NAME
+        if lineheight is None:
+            lineheight = DEFAULT_LINE_HEIGHT
+        hanchor, vanchor = anchor = anchor or (0.5, 0.5)
+        rect = pygame.Rect(rect)
+        x = rect.x + hanchor * rect.width
+        y = rect.y + vanchor * rect.height
+        fontsize = _fitsize(text, fontname, sysfontname, bold, italic, underline,
+                            rect.width, rect.height, lineheight, strip)
+        return self.draw(text, (x, y), fontname=fontname, fontsize=fontsize, lineheight=lineheight,
+                    width=rect.width, strip=strip, anchor=anchor, **kwargs)
+
+ptext = Ptext()
+
+def clean():
+    global _surf_size_total
+    memory_limit = MEMORY_LIMIT_MB * (1 << 20)
+    if _surf_size_total < memory_limit:
+        return
+    memory_limit *= MEMORY_REDUCTION_FACTOR
+    keys = sorted(_surf_cache, key=_surf_tick_usage.get)
+    for key in keys:
+        w, h = _surf_cache[key].get_size()
+        del _surf_cache[key]
+        del _surf_tick_usage[key]
+        _surf_size_total -= 4 * w * h
+        if _surf_size_total < memory_limit:
+            break
+
+def weak_method(method):
+    """Quick weak method ref in case users aren't using Python 3.4"""
+    selfref = ref(method.__self__)
+    funcref = ref(method.__func__)
+
+    def weakref():
+        self = selfref()
+        func = funcref()
+        if self is None or func is None:
+            return None
+        return func.__get__(self)
+    return weakref
+
+
+def mkref(o):
+    if isinstance(o, MethodType):
+        return weak_method(o)
+    else:
+        try:
+            return ref(o)
+        except TypeError:
+            if isinstance(o, builtin_function_or_method):
+                return lambda: o
+            raise
+
+
+@total_ordering
+class Event:
+    """An event scheduled for a future time.
+    Events are ordered by their scheduled execution time.
+    """
+
+    def __init__(self, time, cb, repeat=None):
+        self.time = time
+        self.repeat = repeat
+        self.cb = mkref(cb)
+        self.name = str(cb)
+        self.repeat = repeat
+
+    def __lt__(self, ano):
+        return self.time < ano.time
+
+    def __eq__(self, ano):
+        return self.time == ano.time
+
+    @property
+    def callback(self):
+        return self.cb()
+
+
+class Clock:
+    """A clock used for event scheduling.
+    When tick() is called, all events scheduled for before now will be called
+    in order.
+    tick() would typically be called from the game loop for the default clock.
+    Additional clocks could be created - for example, a game clock that could
+    be suspended in pause screens. Your code must take care of calling tick()
+    or not. You could also run the clock at a different rate if desired, by
+    scaling dt before passing it to tick().
+    """
+
+    def __init__(self):
+        self.t = 0
+        self.fired = False
+        self.events = []
+        self._each_tick = []
+
+    def clear(self):
+        """Remove all handlers from this clock."""
+        self.events.clear()
+        self._each_tick.clear()
+
+    def schedule(self, callback, delay):
+        """Schedule callback to be called once, at `delay` seconds from now.
+        :param callback: A parameterless callable to be called.
+        :param delay: The delay before the call (in clock time / seconds).
+        """
+        heapq.heappush(self.events, Event(self.t + delay, callback, None))
+
+    def schedule_unique(self, callback, delay):
+        """Schedule callback to be called once, at `delay` seconds from now.
+        If it was already scheduled, postpone its firing.
+        :param callback: A parameterless callable to be called.
+        :param delay: The delay before the call (in clock time / seconds).
+        """
+        self.unschedule(callback)
+        self.schedule(callback, delay)
+
+    def schedule_interval(self, callback, delay):
+        """Schedule callback to be called every `delay` seconds.
+        The first occurrence will be after `delay` seconds.
+        :param callback: A parameterless callable to be called.
+        :param delay: The interval in seconds.
+        """
+        heapq.heappush(self.events, Event(self.t + delay, callback, delay))
+
+    def unschedule(self, callback):
+        """Unschedule the given callback.
+        If scheduled multiple times all instances will be unscheduled.
+        """
+        self.events = [
+            e for e in self.events
+            if e.callback != callback
+            if e.callback is not None
+        ]
+        heapq.heapify(self.events)
+        self._each_tick = [e for e in self._each_tick if e() != callback]
+
+    def each_tick(self, callback):
+        """Schedule a callback to be called every tick.
+        Unlike the standard scheduler functions, the callable is passed the
+        elapsed clock time since the last call (the same value passed to tick).
+        """
+        self._each_tick.append(mkref(callback))
+
+    def _fire_each_tick(self, dt):
+        dead = [None]
+        for r in self._each_tick:
+            cb = r()
+            if cb is not None:
+                self.fired = True
+                try:
+                    cb(dt)
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+                    dead.append(cb)
+        self._each_tick = [e for e in self._each_tick if e() not in dead]
+
+    def tick(self, dt):
+        """Update the clock time and fire all scheduled events.
+        :param dt: The elapsed time in seconds.
+        """
+        self.fired = False
+        self.t += float(dt)
+        self._fire_each_tick(dt)
+        while self.events and self.events[0].time <= self.t:
+            ev = heapq.heappop(self.events)
+            cb = ev.callback
+            if not cb:
+                continue
+
+            if ev.repeat is not None:
+                self.schedule_interval(cb, ev.repeat)
+
+            self.fired = True
+            try:
+                cb()
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                self.unschedule(cb)
+
+
+def round_pos(pos):
+    """Round a tuple position so it can be used for drawing."""
+    try:
+        x, y = pos
+    except TypeError:
+        raise TypeError(
+            "Coordinate must be a tuple (not {!r})".format(pos)) from None
+    try:
+        return round(x), round(y)
+    except TypeError:
+        raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) from None  # noqa
+
+
+def make_color(arg):
+    if isinstance(arg, tuple):
+        return arg
+    return tuple(pygame.Color(arg))
+
+
+class SurfacePainter:
+    """Interface to pygame.draw that is bound to a surface."""
+
+    def __init__(self, screen):
+        self._screen = screen
+
+    @property
+    def _surf(self):
+        return self._screen.surface
+
+    def line(self, start, end, color, width=1):
+        """Draw a line from start to end."""
+        start = round_pos(start)
+        end = round_pos(end)
+        pygame.draw.line(self._surf, make_color(color), start, end, width)
+
+    def circle(self, pos, radius, color, width=1):
+        """Draw a circle."""
+        pos = round_pos(pos)
+        pygame.draw.circle(self._surf, make_color(color), pos, radius, width)
+
+    def filled_circle(self, pos, radius, color):
+        """Draw a filled circle."""
+        pos = round_pos(pos)
+        pygame.draw.circle(self._surf, make_color(color), pos, radius, 0)
+
+    def polygon(self, points, color):
+        """Draw a polygon."""
+        try:
+            iter(points)
+        except TypeError:
+            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw") from None  # noqa
+        points = [round_pos(point) for point in points]
+        pygame.draw.polygon(self._surf, make_color(color), points, 1)
+
+    def filled_polygon(self, points, color):
+        """Draw a filled polygon."""
+        try:
+            iter(points)
+        except TypeError:
+            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw") from None  # noqa
+        points = [round_pos(point) for point in points]
+        pygame.draw.polygon(self._surf, make_color(color), points, 0)
+
+    def rect(self, rect, color, width=1):
+        """Draw a rectangle."""
+        if not isinstance(rect, RECT_CLASSES):
+            raise TypeError("screen.draw.rect() requires a rect to draw")
+        pygame.draw.rect(self._surf, make_color(color), rect, width)
+
+    def filled_rect(self, rect, color):
+        """Draw a filled rectangle."""
+        if not isinstance(rect, RECT_CLASSES):
+            raise TypeError(
+                "screen.draw.filled_rect() requires a rect to draw")
+        pygame.draw.rect(self._surf, make_color(color), rect, 0)
+
+    def text(self, *args, **kwargs):
+        """Draw text to the screen."""
+        # FIXME: expose ptext parameters, for autocompletion and autodoc
+        ptext.draw(*args, surf=self._surf, **kwargs)
+
+    def textbox(self, *args, **kwargs):
+        """Draw text to the screen, wrapped to fit a box"""
+        # FIXME: expose ptext parameters, for autocompletion and autodoc
+        ptext.drawbox(*args, surf=self._surf, **kwargs)
+
+
+class Screen:
+    """Interface to the screen."""
+
+    def __init__(self, surface):
+        self.surface = surface
+        self.width, self.height = surface.get_size()
+
+    def bounds(self):
+        """Return a Rect representing the bounds of the screen."""
+        return ZRect((0, 0), (self.width, self.height))
+
+    def clear(self):
+        """Clear the screen to black."""
+        self.fill((0, 0, 0))
+
+    def fill(self, color, gcolor=None):
+        """Fill the screen with a colour."""
+        self.surface.fill(make_color(color))
+
+    def blit(self, image, pos):
+        """Draw a sprite onto the screen.
+        "blit" is an archaic name for this operation, but one that is is still
+        frequently used, for example in Pygame. See the `Wikipedia article`__
+        for more about the etymology of the term.
+        .. __: http://en.wikipedia.org/wiki/Bit_blit
+        :param image: A Surface or the name of an image object to load.
+        :param pos: The coordinates at which the top-left corner of the sprite
+                    will be positioned. This may be given as a pair of
+                    coordinates or as a Rect. If a Rect is given the sprite
+                    will be drawn at ``rect.topleft``.
+        """
+        if isinstance(image, str):
+            image = loaders.images.load(image)
+        self.surface.blit(image, pos)
+
+    @property
+    def draw(self):
+        return SurfacePainter(self)
+
+    def __repr__(self):
+        return "<Screen width={} height={}>".format(self.width, self.height)
+
+# One instance of a clock is available by default, to simplify the API
+# clock = Clock()
+# tick = clock.tick
+# schedule = clock.schedule
+# schedule_interval = clock.schedule_interval
+# schedule_unique = clock.schedule_unique
+# unschedule = clock.unschedule
+# each_tick = clock.each_tick
+
+
+class Keyboard:
+    """The current state of the keyboard.
+    Each attribute represents a key. For example, ::
+        keyboard.a
+    is True if the 'A' key is depressed, and False otherwise.
+    """
+    # The current key state. This may as well be a class attribute - there's
+    # only one keyboard.
+    _pressed = set()
+
+    def __getattr__(self, kname):
+        # return is a reserved word, so alias enter to return
+        if kname == 'enter':
+            kname = 'return'
+        try:
+            key = keys[kname.upper()]
+        except AttributeError:
+            raise AttributeError('The key "%s" does not exist' % key)
+        return key.value in self._pressed
+
+    def _press(self, key):
+        """Called by Game to mark the key as pressed."""
+        self._pressed.add(key)
+
+    def _release(self, key):
+        """Called by Game to mark the key as released."""
+        self._pressed.discard(key)
+
+    def __getitem__(self, k):
+        if isinstance(k, keys):
+            return k.value in self._pressed
+        else:
+            print(
+                "String lookup in keyboard (eg. keyboard[%r]) is deprecated.")
+            return getattr(self, k)
+
+    def __repr__(self):
+        return "<Keyboard pressed={}>".format(self._pressed)
+
+
+keyboard = Keyboard()
+
+
+def exit():
+    """Wait for up to a second for all sounds to play out
+    and then exit
+    """
+    pygame.quit()
+
+
+class PGZeroGame:
+    def __init__(self, mod):
+        self.mod = mod
+        self.screen = None
+        self.width = None
+        self.height = None
+        self.title = None
+        self.icon = None
+        self.running = False
+        self.keyboard = keyboard.keyboard
+        self.handlers = {}
+
+    def reinit_screen(self):
+        """Reinitialise the window.
+        Return True if the dimensions of the screen changed.
+        """
+        global screen
+        changed = False
+        mod = self.mod
+
+        icon = getattr(self.mod, 'ICON', DEFAULTICON)
+        if icon and icon != self.icon:
+            self.show_icon()
+
+        w = getattr(mod, 'WIDTH', 800)
+        h = getattr(mod, 'HEIGHT', 600)
+        if w != self.width or h != self.height:
+            self.screen = pygame.display.set_mode((w, h), DISPLAY_FLAGS)
+            if hasattr(self.mod, 'screen'):
+                self.mod.screen.surface = self.screen
+            else:
+                screen = Screen(self.screen)
+                self.mod.screen = builtins.screen = screen
+            self.width = w
+            self.height = h
+
+        title = getattr(self.mod, 'TITLE', 'Pygame Zero Game')
+        if title != self.title:
+            pygame.display.set_caption(title)
+            self.title = title
+
+        return changed
+
+    def show_icon(self):
+        icon = getattr(self.mod, 'ICON', DEFAULTICON)
+        if icon is DEFAULTICON:
+            self.show_default_icon()
+        else:
+            pygame.display.set_icon(pgzero.loaders.images.load(icon))
+        self.icon = icon
+
+    EVENT_HANDLERS = {
+        pygame.MOUSEBUTTONDOWN: 'on_mouse_down',
+        pygame.MOUSEBUTTONUP: 'on_mouse_up',
+        pygame.MOUSEMOTION: 'on_mouse_move',
+        pygame.KEYDOWN: 'on_key_down',
+        pygame.KEYUP: 'on_key_up',
+    }
+
+    def map_buttons(val):
+        return {c for c, pressed in zip(mouse, val) if pressed}
+
+    EVENT_PARAM_MAPPERS = {
+        'buttons': map_buttons,
+        'button': mouse,
+        'key': keys
+    }
+
+    def load_handlers(self):
+        self.handlers = {}
+        for type, name in self.EVENT_HANDLERS.items():
+            handler = getattr(self.mod, name, None)
+            if callable(handler):
+                self.handlers[type] = self.prepare_handler(handler)
+
+    def prepare_handler(self, handler):
+        """Adapt a pgzero game's raw handler function to take a Pygame Event.
+        Returns a one-argument function of the form ``handler(event)``.
+        This will ensure that the correct arguments are passed to the raw
+        handler based on its argument spec.
+        The wrapped handler will also map certain parameter values using
+        callables from EVENT_PARAM_MAPPERS; this ensures that the value of
+        'button' inside the handler is a real instance of constants.mouse,
+        which means (among other things) that it will print as a symbolic value
+        rather than a naive integer.
+        """
+        code = handler.__code__
+        param_names = code.co_varnames[:code.co_argcount]
+
+        def make_getter(mapper, getter):
+            if mapper:
+                return lambda event: mapper(getter(event))
+            return getter
+
+        param_handlers = []
+        for name in param_names:
+            getter = operator.attrgetter(name)
+            mapper = self.EVENT_PARAM_MAPPERS.get(name)
+            param_handlers.append((name, make_getter(mapper, getter)))
+
+        def prep_args(event):
+            return {name: get(event) for name, get in param_handlers}
+
+        def new_handler(event):
+            try:
+                prepped = prep_args(event)
+            except ValueError:
+                # If we couldn't construct the keys/mouse objects representing
+                # the button that was pressed, then skip the event handler.
+                #
+                # This happens because Pygame can generate key codes that it
+                # does not have constants for.
+                return
+            else:
+                return handler(**prepped)
+
+        return new_handler
+
+    def dispatch_event(self, event):
+        handler = self.handlers.get(event.type)
+        if handler:
+            self.need_redraw = True
+            handler(event)
+
+    def get_update_func(self):
+        """Get a one-argument update function.
+        If the module defines a function matching ::
+            update(dt)
+        or ::
+            update()
+        then this will be called. Otherwise return a no-op function.
+        """
+        try:
+            update = self.mod.update
+        except AttributeError:
+            return None
+        else:
+            if update.__code__.co_argcount == 0:
+                return lambda dt: update()
+            return update
+
+    def get_draw_func(self):
+        """Get a draw function.
+        If no draw function is define, raise an exception.
+        """
+        try:
+            draw = self.mod.draw
+        except AttributeError:
+            return lambda: None
+        else:
+            if draw.__code__.co_argcount != 0:
+                raise TypeError(
+                    "draw() must not take any arguments."
+                )
+            return draw
+
+    def run(self):
+        pass
+
+
+def positional_parameters(handler):
+    """Get the positional parameters of the given function."""
+    code = handler.__code__
+    return code.co_varnames[:code.co_argcount]
+
+
+class ZRect:
+    """ZRect
+    This is a Python implementation of the pygame Rect class. Its raison
+    d'être is to allow the coordinates to be floating point. All pygame
+    functions which require a rect allow for an object with a "rect"
+    attribute and whose coordinates will be converted to integers implictly.
+    All functions which require a dict will use the flexible constructor
+    to convert from: this (or a subclass); a Pygame Rect; a 4-tuple or a
+    pair of 2-tuples. In addition, they'll recognise any object which has
+    an (optionally callable) .rect attribute whose value will be used instead.
+    """
+
+    _item_mapping = dict(enumerate("xywh"))
+
+    def __init__(self, *args):
+
+        if len(args) == 1:
+            args = tuple(self._handle_one_arg(args[0]))
+
+        #
+        # At this point we have one of:
+        #
+        # x, y, w, h
+        # (x, y), (w, h)
+        # (x, y, w, h),
+        #
+        if len(args) == 4:
+            self.x, self.y, self.w, self.h = args
+        elif len(args) == 2:
+            (self.x, self.y), (self.w, self.h) = args
+        elif len(args) == 1:
+            self.x, self.y, self.w, self.h = args[0]
+        else:
+            raise TypeError(
+                "%s should be called with one, two or four arguments"
+                % (self.__class__.__name__)
+            )
+
+        self.rect = self
+
+    def _handle_one_arg(self, arg):
+        """Handle -- possibly recursively -- the case of one parameter
+        Pygame -- and consequently pgzero -- is very accommodating when constructing
+        a rect. You can pass four integers, two pairs of 2-tuples, or one 4-tuple.
+        Also, you can pass an existing Rect-like object, or an object with a .rect
+        attribute. The object named by the .rect attribute is either one of the above,
+        or it's a callable object which returns one of the above.
+        This is evidently a recursive solution where an object with a .rect
+        attribute can yield an object with a .rect attribute, and so ad infinitum.
+        """
+        #
+        # If the arg is an existing rect, return its elements
+        #
+        if isinstance(arg, RECT_CLASSES):
+            return arg.x, arg.y, arg.w, arg.h
+
+        #
+        # If it's something with a .rect attribute, start again with
+        # that attribute, calling it first if it's callable
+        #
+        if hasattr(arg, "rect"):
+            rectobj = arg.rect
+            if callable(rectobj):
+                rectobj = rectobj()
+            return self._handle_one_arg(rectobj)
+
+        #
+        # Otherwise, we assume it's an iterable of four elements
+        #
+        return arg
+
+    def __repr__(self):
+        return "<%s (x: %s, y: %s, w: %s, h: %s)>" % (
+            self.__class__.__name__, self.x, self.y, self.w, self.h)
+
+    def __reduce__(self):
+        return self.__class__, (self.x, self.y, self.w, self.h)
+
+    def copy(self):
+        return self.__class__(self.x, self.y, self.w, self.h)
+    __copy__ = copy
+
+    def __len__(self):
+        return 4
+
+    def __getitem__(self, item):
+        try:
+            return getattr(self, self._item_mapping[item])
+        except KeyError:
+            raise IndexError
+
+    def __setitem__(self, item, value):
+        try:
+            attribute = self._item_mapping[item]
+        except KeyError:
+            raise IndexError
+        else:
+            setattr(attribute, value)
+
+    def __bool__(self):
+        return self.w != 0 and self.h != 0
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
+        yield self.w
+        yield self.h
+
+    def __hash__(self):
+        raise TypeError("ZRect instances may not be used as dictionary keys")
+
+    def __eq__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) == (rect.x, rect.y, rect.w, rect.h)
+
+    def __ne__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) != (rect.x, rect.y, rect.w, rect.h)
+
+    def __lt__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) < (rect.x, rect.y, rect.w, rect.h)
+
+    def __gt__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) > (rect.x, rect.y, rect.w, rect.h)
+
+    def __le__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) <= (rect.x, rect.y, rect.w, rect.h)
+
+    def __ge__(self, *other):
+        rect = self.__class__(*other)
+        return (self.x, self.y, self.w, self.h) >= (rect.x, rect.y, rect.w, rect.h)
+
+    def __contains__(self, other):
+        """Test whether a point (x, y) or another rectangle
+        (anything accepted by ZRect) is contained within this ZRect
+        """
+        if len(other) == 2:
+            return self.collidepoint(*other)
+        else:
+            return self.contains(*other)
+
+    def _get_width(self):
+        return self.w
+
+    def _set_width(self, width):
+        self.w = width
+    width = property(_get_width, _set_width)
+
+    def _get_height(self):
+        return self.h
+
+    def _set_height(self, height):
+        self.h = height
+    height = property(_get_height, _set_height)
+
+    def _get_top(self):
+        return self.y
+
+    def _set_top(self, top):
+        self.y = top
+    top = property(_get_top, _set_top)
+
+    def _get_left(self):
+        return self.x
+
+    def _set_left(self, left):
+        self.x = left
+    left = property(_get_left, _set_left)
+
+    def _get_right(self):
+        return self.x + self.w
+
+    def _set_right(self, right):
+        self.x = right - self.w
+    right = property(_get_right, _set_right)
+
+    def _get_bottom(self):
+        return self.y + self.h
+
+    def _set_bottom(self, bottom):
+        self.y = bottom - self.h
+    bottom = property(_get_bottom, _set_bottom)
+
+    def _get_centerx(self):
+        return self.x + (self.w / 2)
+
+    def _set_centerx(self, centerx):
+        self.x = centerx - (self.w / 2)
+    centerx = property(_get_centerx, _set_centerx)
+
+    def _get_centery(self):
+        return self.y + (self.h / 2)
+
+    def _set_centery(self, centery):
+        self.y = centery - (self.h / 2)
+    centery = property(_get_centery, _set_centery)
+
+    def _get_topleft(self):
+        return self.x, self.y
+
+    def _set_topleft(self, topleft):
+        self.x, self.y = topleft
+    topleft = property(_get_topleft, _set_topleft)
+
+    def _get_topright(self):
+        return self.x + self.w, self.y
+
+    def _set_topright(self, topright):
+        x, y = topright
+        self.x = x - self.w
+        self.y = y
+    topright = property(_get_topright, _set_topright)
+
+    def _get_bottomleft(self):
+        return self.x, self.y + self.h
+
+    def _set_bottomleft(self, bottomleft):
+        x, y = bottomleft
+        self.x = x
+        self.y = y - self.h
+    bottomleft = property(_get_bottomleft, _set_bottomleft)
+
+    def _get_bottomright(self):
+        return self.x + self.w, self.y + self.h
+
+    def _set_bottomright(self, bottomright):
+        x, y = bottomright
+        self.x = x - self.w
+        self.y = y - self.h
+    bottomright = property(_get_bottomright, _set_bottomright)
+
+    def _get_midtop(self):
+        return self.x + self.w / 2, self.y
+
+    def _set_midtop(self, midtop):
+        x, y = midtop
+        self.x = x - self.w / 2
+        self.y = y
+    midtop = property(_get_midtop, _set_midtop)
+
+    def _get_midleft(self):
+        return self.x, self.y + self.h / 2
+
+    def _set_midleft(self, midleft):
+        x, y = midleft
+        self.x = x
+        self.y = y - self.h / 2
+    midleft = property(_get_midleft, _set_midleft)
+
+    def _get_midbottom(self):
+        return self.x + self.w / 2, self.y + self.h
+
+    def _set_midbottom(self, midbottom):
+        x, y = midbottom
+        self.x = x - self.w / 2
+        self.y = y - self.h
+    midbottom = property(_get_midbottom, _set_midbottom)
+
+    def _get_midright(self):
+        return self.x + self.w, self.y + self.h / 2
+
+    def _set_midright(self, midright):
+        x, y = midright
+        self.x = x - self.w
+        self.y = y - self.h / 2
+    midright = property(_get_midright, _set_midright)
+
+    def _get_center(self):
+        return self.x + self.w / 2, self.y + self.h / 2
+
+    def _set_center(self, center):
+        x, y = center
+        self.x = x - self.w / 2
+        self.y = y - self.h / 2
+    center = property(_get_center, _set_center)
+
+    def _get_size(self):
+        return self.w, self.h
+
+    def _set_size(self, size):
+        self.w, self.h = size
+    size = property(_get_size, _set_size)
+
+    def move(self, x, y):
+        return self.__class__(self.x + x, self.y + y, self.w, self.h)
+
+    def move_ip(self, x, y):
+        self.x += x
+        self.y += y
+
+    def _inflated(self, x, y):
+        return self.x - x / 2, self.y - y / 2, self.w + x, self.h + y
+
+    def inflate(self, x, y):
+        return self.__class__(*self._inflated(x, y))
+
+    def inflate_ip(self, x, y):
+        self.x, self.y, self.w, self.h = self._inflated(x, y)
+
+    def _clamped(self, *other):
+        rect = self.__class__(*other)
+
+        if self.w >= rect.w:
+            x = rect.x + rect.w / 2 - self.w / 2
+        elif self.x < rect.x:
+            x = rect.x
+        elif self.x + self.w > rect.x + rect.w:
+            x = rect.x + rect.w - self.w
+        else:
+            x = self.x
+
+        if self.h >= rect.h:
+            y = rect.y + rect.h / 2 - self.h / 2
+        elif self.y < rect.y:
+            y = rect.y
+        elif self.y + self.h > rect.y + rect.h:
+            y = rect.y + rect.h - self.h
+        else:
+            y = self.y
+
+        return x, y
+
+    def clamp(self, *other):
+        rect = self.__class__(*other)
+        x, y = self._clamped(rect)
+        return self.__class__(x, y, self.w, self.h)
+
+    def clamp_ip(self, *other):
+        rect = self.__class__(*other)
+        self.x, self.y = self._clamped(rect)
+
+    def _clipped(self, *other):
+        rect = self.__class__(*other)
+
+        if self.x >= rect.x and self.x < (rect.x + rect.w):
+            x = self.x
+        elif rect.x >= self.x and rect.x < (self.x + self.w):
+            x = rect.x
+        else:
+            raise 'NoIntersect'
+
+        if (self.x + self.w) > rect.x and (self.x + self.w) <= (rect.x + rect.w):
+            w = self.x + self.w - x
+        elif (rect.x + rect.w) > self.x and (rect.x + rect.w) <= (self.x + self.w):
+            w = rect.x + rect.w - x
+        else:
+            raise 'NoIntersect'
+
+        if self.y >= rect.y and self.y < (rect.y + rect.h):
+            y = self.y
+        elif rect.y >= self.y and rect.y < (self.y + self.h):
+            y = rect.y
+        else:
+            raise 'NoIntersect'
+
+        if (self.y + self.h) > rect.y and (self.y + self.h) <= (rect.y + rect.h):
+            h = self.y + self.h - y
+        elif (rect.y + rect.h) > self.y and (rect.y + rect.h) <= (self.y + self.h):
+            h = rect.y + rect.h - y
+        else:
+            raise 'NoIntersect'
+
+        return x, y, w, h
+
+    def clip(self, *other):
+        rect = self.__class__(*other)
+        try:
+            x, y, w, h = self._clipped(rect)
+        except:
+            x, y, w, h = self.x, self.y, 0, 0
+        return self.__class__(x, y, w, h)
+
+    def clip_ip(self, *other):
+        rect = self.__class__(*other)
+        try:
+            self.x, self.y, self.w, self.h = self._clipped(rect)
+        except:
+            self.x, self.y, self.w, self.h = self.x, self.y, 0, 0
+
+    def _unioned(self, *other):
+        rect = self.__class__(*other)
+        x = min(self.x, rect.x)
+        y = min(self.y, rect.y)
+        w = max(self.x + self.w, rect.x + rect.w) - x
+        h = max(self.y + self.h, rect.y + rect.h) - y
+        return x, y, w, h
+
+    def union(self, *other):
+        rect = self.__class__(*other)
+        return self.__class__(*self._unioned(rect))
+
+    def union_ip(self, *other):
+        rect = self.__class__(*other)
+        self.x, self.y, self.w, self.h = self._unioned(rect)
+
+    def _unionalled(self, others):
+        allrects = [self] + [self.__class__(other) for other in others]
+        x = min(r.x for r in allrects)
+        y = min(r.y for r in allrects)
+        w = max(r.x + r.w for r in allrects) - x
+        h = max(r.y + r.h for r in allrects) - y
+        return x, y, w, h
+
+    def unionall(self, others):
+        return self.__class__(*self._unionalled(others))
+
+    def unionall_ip(self, others):
+        self.x, self.y, self.w, self.h = self._unionalled(others)
+
+    def fit(self, *other):
+        rect = self.__class__(*other)
+        ratio = max(self.w / rect.w, self.h / rect.h)
+        w = self.w / ratio
+        h = self.h / ratio
+        x = rect.x + (rect.w - w) / 2
+        y = rect.y + (rect.h - h) / 2
+        return self.__class__(x, y, w, h)
+
+    def normalize(self):
+        if self.w < 0:
+            self.x += self.w
+            self.w = abs(self.w)
+        if self.h < 0:
+            self.y += self.h
+            self.h = abs(self.h)
+
+    def contains(self, *other):
+        rect = self.__class__(*other)
+        return (
+            self.x <= rect.x and
+            self.y <= rect.y and
+            self.x + self.w >= rect.x + rect.w and
+            self.y + self.h >= rect.y + rect.h and
+            self.x + self.w > rect.x and
+            self.y + self.h > rect.y
+        )
+
+    def collidepoint(self, *args):
+        if len(args) == 1:
+            x, y = args[0]
+        else:
+            x, y = args
+        return (
+            self.x <= x < (self.x + self.w) and
+            self.y <= y < (self.y + self.h)
+        )
+
+    def colliderect(self, *other):
+        rect = self.__class__(*other)
+        return (
+            self.x < rect.x + rect.w and
+            self.y < rect.y + rect.h and
+            self.x + self.w > rect.x and
+            self.y + self.h > rect.y
+        )
+
+    def collidelist(self, others):
+        for n, other in enumerate(others):
+            if self.colliderect(other):
+                return n
+        else:
+            return -1
+
+    def collidelistall(self, others):
+        return [n for n, other in enumerate(others) if self.colliderect(other)]
+
+    def collidedict(self, dict, use_values=True):
+        for k, v in dict.items():
+            if self.colliderect(v if use_values else k):
+                return k, v
+
+    def collidedictall(self, dict, use_values=True):
+        #  FIX whatever that bullshit is
+        val = operator.itemgetter(1 if use_values else 0)
+        return [i for i in dict.items() if self.colliderect(val(i))]
+
+
+RECT_CLASSES = (pygame.rect.Rect, ZRect)
+
+
+def calculate_anchor(value, dim, total):
+    if isinstance(value, str):
+        try:
+            return total * ANCHORS[dim][value]
+        except KeyError:
+            raise ValueError(
+                '%r is not a valid %s-anchor name' % (value, dim)
+            )
+    return float(value)
+
+
+def transform_anchor(ax, ay, w, h, angle):
+    """Transform anchor based upon a rotation of a surface of size w x h."""
+    theta = -radians(angle)
+
+    sintheta = sin(theta)
+    costheta = cos(theta)
+
+    # Dims of the transformed rect
+    tw = abs(w * costheta) + abs(h * sintheta)
+    th = abs(w * sintheta) + abs(h * costheta)
+
+    # Offset of the anchor from the center
+    cax = ax - w * 0.5
+    cay = ay - h * 0.5
+
+    # Rotated offset of the anchor from the center
+    rax = cax * costheta - cay * sintheta
+    ray = cax * sintheta + cay * costheta
+
+    return (
+        tw * 0.5 + rax,
+        th * 0.5 + ray
+    )
+
+
+def _set_angle(actor, current_surface):
+    if actor._angle % 360 == 0:
+        # No changes required for default angle.
+        return current_surface
+    return pygame.transform.rotate(current_surface, actor._angle)
+
+
+def _set_opacity(actor, current_surface):
+    alpha = int(actor.opacity * MAX_ALPHA + 0.5)  # +0.5 for rounding up.
+
+    if alpha == MAX_ALPHA:
+        # No changes required for fully opaque surfaces (corresponds to the
+        # default opacity of the current_surface).
+        return current_surface
+
+    alpha_img = pygame.Surface(current_surface.get_size(), pygame.SRCALPHA)
+    alpha_img.fill((255, 255, 255, alpha))
+    alpha_img.blit(
+        current_surface,
+        (0, 0),
+        special_flags=pygame.BLEND_RGBA_MULT
+    )
+    return alpha_img
+
+
+class Actor:
+    EXPECTED_INIT_KWARGS = SYMBOLIC_POSITIONS
+    DELEGATED_ATTRIBUTES = [
+        a for a in dir(ZRect) if not a.startswith("_")
+    ]
+
+    function_order = [_set_opacity, _set_angle]
+    _anchor = _anchor_value = (0, 0)
+    _angle = 0.0
+    _opacity = 1.0
+    images = ImageLoader()
+
+    def _build_transformed_surf(self):
+        cache_len = len(self._surface_cache)
+        if cache_len == 0:
+            last = self._orig_surf
+        else:
+            last = self._surface_cache[-1]
+        for f in self.function_order[cache_len:]:
+            new_surf = f(self, last)
+            self._surface_cache.append(new_surf)
+            last = new_surf
+        return self._surface_cache[-1]
+
+    def __init__(self, image, pos=POS_TOPLEFT, anchor=ANCHOR_CENTER, **kwargs):
+        self._handle_unexpected_kwargs(kwargs)
+
+        self._surface_cache = []
+        self.__dict__["_rect"] = ZRect((0, 0), (0, 0))
+        # Initialise it at (0, 0) for size (0, 0).
+        # We'll move it to the right place and resize it later
+
+        self.image = image
+        self._init_position(pos, anchor, **kwargs)
+
+    def __getattr__(self, attr):
+        if attr in self.__class__.DELEGATED_ATTRIBUTES:
+            return getattr(self._rect, attr)
+        else:
+            return object.__getattribute__(self, attr)
+
+    def __setattr__(self, attr, value):
+        """Assign rect attributes to the underlying rect."""
+        if attr in self.__class__.DELEGATED_ATTRIBUTES:
+            return setattr(self._rect, attr, value)
+        else:
+            # Ensure data descriptors are set normally
+            return object.__setattr__(self, attr, value)
+
+    def __iter__(self):
+        return iter(self._rect)
+
+    def __repr__(self):
+        return '<{} {!r} pos={!r}>'.format(
+            type(self).__name__,
+            self._image_name,
+            self.pos
+        )
+
+    def __dir__(self):
+        standard_attributes = [
+            key
+            for key in self.__dict__.keys()
+            if not key.startswith("_")
+        ]
+        return standard_attributes + self.__class__.DELEGATED_ATTRIBUTES
+
+    def _handle_unexpected_kwargs(self, kwargs):
+        unexpected_kwargs = set(kwargs.keys()) - self.EXPECTED_INIT_KWARGS
+        if not unexpected_kwargs:
+            return
+        raise TypeError("Unexpected keyword argument")
+
+    def _init_position(self, pos, anchor, **kwargs):
+        if anchor is None:
+            anchor = ("center", "center")
+        self.anchor = anchor
+
+        symbolic_pos_args = {
+            k: kwargs[k] for k in kwargs if k in SYMBOLIC_POSITIONS}
+
+        if not pos and not symbolic_pos_args:
+            # No positional information given, use sensible top-left default
+            self.topleft = (0, 0)
+        elif pos and symbolic_pos_args:
+            raise TypeError(
+                "'pos' argument cannot be mixed with 'topleft', "
+                "'topright' etc. argument."
+            )
+        elif pos:
+            self.pos = pos
+        else:
+            self._set_symbolic_pos(symbolic_pos_args)
+
+    def _set_symbolic_pos(self, symbolic_pos_dict):
+        if len(symbolic_pos_dict) == 0:
+            raise TypeError(
+                "No position-setting keyword arguments ('topleft', "
+                "'topright' etc) found."
+            )
+        if len(symbolic_pos_dict) > 1:
+            raise TypeError(
+                "Only one 'topleft', 'topright' etc. argument is allowed."
+            )
+
+        setter_name, position = symbolic_pos_dict.popitem()
+        setattr(self, setter_name, position)
+
+    def _update_transform(self, function):
+        if function in self.function_order:
+            i = self.function_order.index(function)
+            del self._surface_cache[i:]
+        else:
+            raise IndexError(
+                "function {!r} does not have a registered order."
+                "".format(function))
+
+    @property
+    def anchor(self):
+        return self._anchor_value
+
+    @anchor.setter
+    def anchor(self, val):
+        self._anchor_value = val
+        self._calc_anchor()
+
+    def _calc_anchor(self):
+        ax, ay = self._anchor_value
+        ow, oh = self._orig_surf.get_size()
+        ax = calculate_anchor(ax, 'x', ow)
+        ay = calculate_anchor(ay, 'y', oh)
+        self._untransformed_anchor = ax, ay
+        if self._angle == 0.0:
+            self._anchor = self._untransformed_anchor
+        else:
+            self._anchor = transform_anchor(ax, ay, ow, oh, self._angle)
+
+    @property
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self, angle):
+        self._angle = angle
+        w, h = self._orig_surf.get_size()
+
+        ra = radians(angle)
+        sin_a = sin(ra)
+        cos_a = cos(ra)
+        self.height = abs(w * sin_a) + abs(h * cos_a)
+        self.width = abs(w * cos_a) + abs(h * sin_a)
+        ax, ay = self._untransformed_anchor
+        p = self.pos
+        self._anchor = transform_anchor(ax, ay, w, h, angle)
+        self.pos = p
+        self._update_transform(_set_angle)
+
+    @property
+    def opacity(self):
+        """Get/set the current opacity value.
+        The allowable range for opacity is any number between and including
+        0.0 and 1.0. Values outside of this will be clamped to the range.
+        * 0.0 makes the image completely transparent (i.e. invisible).
+        * 1.0 makes the image completely opaque (i.e. fully viewable).
+        Values between 0.0 and 1.0 will give varying levels of transparency.
+        """
+        return self._opacity
+
+    @opacity.setter
+    def opacity(self, opacity):
+        # Clamp the opacity to the allowable range.
+        self._opacity = min(1.0, max(0.0, opacity))
+        self._update_transform(_set_opacity)
+
+    @property
+    def pos(self):
+        px, py = self.topleft
+        ax, ay = self._anchor
+        return px + ax, py + ay
+
+    @pos.setter
+    def pos(self, pos):
+        px, py = pos
+        ax, ay = self._anchor
+        self.topleft = px - ax, py - ay
+
+    @property
+    def x(self):
+        ax = self._anchor[0]
+        return self.left + ax
+
+    @x.setter
+    def x(self, px):
+        self.left = px - self._anchor[0]
+
+    @property
+    def y(self):
+        ay = self._anchor[1]
+        return self.top + ay
+
+    @y.setter
+    def y(self, py):
+        self.top = py - self._anchor[1]
+
+    @property
+    def image(self):
+        return self._image_name
+
+    @image.setter
+    def image(self, image):
+        self._image_name = image
+        self._orig_surf = self.images.load(image)
+        self._surface_cache.clear()  # Clear out old image's cache.
+        self._update_pos()
+
+    def _update_pos(self):
+        p = self.pos
+        self.width, self.height = self._orig_surf.get_size()
+        self._calc_anchor()
+        self.pos = p
+
+    def draw(self):
+        s = self._build_transformed_surf()
+        game.screen.blit(s, self.topleft)
+
+    def angle_to(self, target):
+        """Return the angle from this actors position to target, in degrees."""
+        if isinstance(target, Actor):
+            tx, ty = target.pos
+        else:
+            tx, ty = target
+        myx, myy = self.pos
+        dx = tx - myx
+        dy = myy - ty   # y axis is inverted from mathematical y in Pygame
+        return degrees(atan2(dy, dx))
+
+    def distance_to(self, target):
+        """Return the distance from this actor's pos to target, in pixels."""
+        if isinstance(target, Actor):
+            tx, ty = target.pos
+        else:
+            tx, ty = target
+        myx, myy = self.pos
+        dx = tx - myx
+        dy = ty - myy
+        return sqrt(dx * dx + dy * dy)
+
+    def unload_image(self):
+        self.images.unload(self._image_name)

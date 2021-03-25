@@ -1,3 +1,4 @@
+from types import MethodType
 import re
 import pygame
 import time
@@ -58,8 +59,71 @@ pygame.font.init()
 
 _font_cache = {}
 
+# =====================================OPERATOR STUFF==================================================================
 
-# =====================================HEAPQ
+
+class itemgetter:
+    """
+    Return a callable object that fetches the given item(s) from its operand.
+    After f = itemgetter(2), the call f(r) returns r[2].
+    After g = itemgetter(2, 5, 3), the call g(r) returns (r[2], r[5], r[3])
+    """
+    __slots__ = ('_items', '_call')
+
+    def __init__(self, item):
+        self._items = (item,)
+
+        def func(obj):
+            return obj[item]
+        self._call = func
+
+    def __call__(self, obj):
+        return self._call(obj)
+
+    def __repr__(self):
+        return '%s.%s(%s)' % (self.__class__.__module__,
+                              self.__class__.__name__,
+                              ', '.join(map(repr, self._items)))
+
+    def __reduce__(self):
+        return self.__class__, self._items
+
+
+class attrgetter:
+    """
+    Return a callable object that fetches the given attribute(s) from its operand.
+    After f = attrgetter('name'), the call f(r) returns r.name.
+    After g = attrgetter('name', 'date'), the call g(r) returns (r.name, r.date).
+    After h = attrgetter('name.first', 'name.last'), the call h(r) returns
+    (r.name.first, r.name.last).
+    """
+    __slots__ = ('_attrs', '_call')
+
+    def __init__(self, attr):
+        if not isinstance(attr, str):
+            raise TypeError('attribute name must be a string')
+        self._attrs = (attr,)
+        names = attr.split('.')
+
+        def func(obj):
+            for name in names:
+                obj = getattr(obj, name)
+            return obj
+        self._call = func
+
+    def __call__(self, obj):
+        return self._call(obj)
+
+    def __repr__(self):
+        return '%s.%s(%s)' % (self.__class__.__module__,
+                              self.__class__.__qualname__,
+                              ', '.join(map(repr, self._attrs)))
+
+    def __reduce__(self):
+        return self.__class__, self._attrs
+
+
+# =====================================HEAPQ PARTIAL IMPLEMENTATION==============================================================
 class HeapqPartial:
     # Код взят из https://github.com/python/cpython/blob/2d1cbe4193499914ccc9d217ea63eb17ff927c91/Lib/heapq.py#L258
     # Поскольку heapq не портирован в Sculpt
@@ -124,8 +188,11 @@ class HeapqPartial:
         heap.append(item)
         self._siftdown(heap, 0, len(heap)-1)
 
+
 heapq = HeapqPartial()
-# -------------------------------LOADERS------------------------------------------------------------
+# ===================================================LOADERS REFACTORED====================================================================
+
+
 class ImageLoader:
 
     def __init__(self):
@@ -133,9 +200,6 @@ class ImageLoader:
 
     EXTNS = ['png', 'gif', 'jpg', 'jpeg', 'bmp']
     TYPE = 'image'
-
-    def _load(self, path):
-        return pygame.image.load(path).convert_alpha()
 
     def __repr__(self):
         return "<Images images={}>".format(self.__dir__())
@@ -156,10 +220,21 @@ class ImageLoader:
         key = self.cache_key(name, args, kwargs)
         if key in self._cache:
             return self._cache[key]
-
+        
+        res = None
         for ext in self.EXTNS:
-            pass
+            path = name + '.' + ext
+            try:
+                res = pygame.image.load(path).convert_alpha()
+            except RuntimeError:
+                pass
 
+        if res is not None:
+            return res
+        else:
+            raise 'ImageNotFound'
+
+images = ImageLoader()
 
 def getfont(fontname=None, fontsize=None, sysfontname=None,
             bold=None, italic=None, underline=None):
@@ -483,25 +558,26 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
 
 _default_surf_sentinel = ()
 
+
 class Ptext:
     def draw(self, text, pos=None,
-            fontname=None, fontsize=None, sysfontname=None,
-            antialias=True, bold=None, italic=None, underline=None,
-            color=None, background=None,
-            top=None, left=None, bottom=None, right=None,
-            topleft=None, bottomleft=None, topright=None, bottomright=None,
-            midtop=None, midleft=None, midbottom=None, midright=None,
-            center=None, centerx=None, centery=None,
-            width=None,	widthem=None, lineheight=None, strip=None,
-            align=None,
-            owidth=None, ocolor=None,
-            shadow=None, scolor=None,
-            gcolor=None,
-            alpha=1.0,
-            anchor=None,
-            angle=0,
-            surf=_default_surf_sentinel,
-            cache=True):
+             fontname=None, fontsize=None, sysfontname=None,
+             antialias=True, bold=None, italic=None, underline=None,
+             color=None, background=None,
+             top=None, left=None, bottom=None, right=None,
+             topleft=None, bottomleft=None, topright=None, bottomright=None,
+             midtop=None, midleft=None, midbottom=None, midright=None,
+             center=None, centerx=None, centery=None,
+             width=None,	widthem=None, lineheight=None, strip=None,
+             align=None,
+             owidth=None, ocolor=None,
+             shadow=None, scolor=None,
+             gcolor=None,
+             alpha=1.0,
+             anchor=None,
+             angle=0,
+             surf=_default_surf_sentinel,
+             cache=True):
 
         if topleft:
             left, top = topleft
@@ -574,7 +650,6 @@ class Ptext:
 
         return tsurf, (x, y)
 
-
     def drawbox(self, text, rect, fontname=None, sysfontname=None, lineheight=None, anchor=None,
                 bold=None, italic=None, underline=None, strip=None, **kwargs):
         if fontname is None:
@@ -588,9 +663,11 @@ class Ptext:
         fontsize = _fitsize(text, fontname, sysfontname, bold, italic, underline,
                             rect.width, rect.height, lineheight, strip)
         return self.draw(text, (x, y), fontname=fontname, fontsize=fontsize, lineheight=lineheight,
-                    width=rect.width, strip=strip, anchor=anchor, **kwargs)
+                         width=rect.width, strip=strip, anchor=anchor, **kwargs)
+
 
 ptext = Ptext()
+
 
 def clean():
     global _surf_size_total
@@ -606,19 +683,6 @@ def clean():
         _surf_size_total -= 4 * w * h
         if _surf_size_total < memory_limit:
             break
-
-def weak_method(method):
-    """Quick weak method ref in case users aren't using Python 3.4"""
-    selfref = ref(method.__self__)
-    funcref = ref(method.__func__)
-
-    def weakref():
-        self = selfref()
-        func = funcref()
-        if self is None or func is None:
-            return None
-        return func.__get__(self)
-    return weakref
 
 
 def mkref(o):
@@ -880,7 +944,7 @@ class Screen:
                     will be drawn at ``rect.topleft``.
         """
         if isinstance(image, str):
-            image = loaders.images.load(image)
+            image = images.load(image)
         self.surface.blit(image, pos)
 
     @property
@@ -962,45 +1026,6 @@ class PGZeroGame:
         self.keyboard = keyboard.keyboard
         self.handlers = {}
 
-    def reinit_screen(self):
-        """Reinitialise the window.
-        Return True if the dimensions of the screen changed.
-        """
-        global screen
-        changed = False
-        mod = self.mod
-
-        icon = getattr(self.mod, 'ICON', DEFAULTICON)
-        if icon and icon != self.icon:
-            self.show_icon()
-
-        w = getattr(mod, 'WIDTH', 800)
-        h = getattr(mod, 'HEIGHT', 600)
-        if w != self.width or h != self.height:
-            self.screen = pygame.display.set_mode((w, h), DISPLAY_FLAGS)
-            if hasattr(self.mod, 'screen'):
-                self.mod.screen.surface = self.screen
-            else:
-                screen = Screen(self.screen)
-                self.mod.screen = builtins.screen = screen
-            self.width = w
-            self.height = h
-
-        title = getattr(self.mod, 'TITLE', 'Pygame Zero Game')
-        if title != self.title:
-            pygame.display.set_caption(title)
-            self.title = title
-
-        return changed
-
-    def show_icon(self):
-        icon = getattr(self.mod, 'ICON', DEFAULTICON)
-        if icon is DEFAULTICON:
-            self.show_default_icon()
-        else:
-            pygame.display.set_icon(pgzero.loaders.images.load(icon))
-        self.icon = icon
-
     EVENT_HANDLERS = {
         pygame.MOUSEBUTTONDOWN: 'on_mouse_down',
         pygame.MOUSEBUTTONUP: 'on_mouse_up',
@@ -1020,10 +1045,10 @@ class PGZeroGame:
 
     def load_handlers(self):
         self.handlers = {}
-        for type, name in self.EVENT_HANDLERS.items():
+        for type_, name in self.EVENT_HANDLERS.items():
             handler = getattr(self.mod, name, None)
             if callable(handler):
-                self.handlers[type] = self.prepare_handler(handler)
+                self.handlers[type_] = self.prepare_handler(handler)
 
     def prepare_handler(self, handler):
         """Adapt a pgzero game's raw handler function to take a Pygame Event.
@@ -1046,7 +1071,7 @@ class PGZeroGame:
 
         param_handlers = []
         for name in param_names:
-            getter = operator.attrgetter(name)
+            getter = attrgetter(name)
             mapper = self.EVENT_PARAM_MAPPERS.get(name)
             param_handlers.append((name, make_getter(mapper, getter)))
 
@@ -1591,8 +1616,7 @@ class ZRect:
                 return k, v
 
     def collidedictall(self, dict, use_values=True):
-        #  FIX whatever that bullshit is
-        val = operator.itemgetter(1 if use_values else 0)
+        val = itemgetter(1 if use_values else 0)
         return [i for i in dict.items() if self.colliderect(val(i))]
 
 
@@ -1670,7 +1694,6 @@ class Actor:
     _anchor = _anchor_value = (0, 0)
     _angle = 0.0
     _opacity = 1.0
-    images = ImageLoader()
 
     def _build_transformed_surf(self):
         cache_len = len(self._surface_cache)
@@ -1871,7 +1894,7 @@ class Actor:
     @image.setter
     def image(self, image):
         self._image_name = image
-        self._orig_surf = self.images.load(image)
+        self._orig_surf = images.load(image)
         self._surface_cache.clear()  # Clear out old image's cache.
         self._update_pos()
 
@@ -1908,4 +1931,4 @@ class Actor:
         return sqrt(dx * dx + dy * dy)
 
     def unload_image(self):
-        self.images.unload(self._image_name)
+        images.unload(self._image_name)

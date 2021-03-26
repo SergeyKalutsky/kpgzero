@@ -1881,7 +1881,7 @@ pygame.display.set_caption(TITLE)
 
 FPS = 60
 while True:
-    dt = pygame.time.get_ticks() / 10000
+    dt = pygame.time.get_ticks() / 100000
     print(dt)
     clock.tick(dt)
     for e in pygame.event.get():

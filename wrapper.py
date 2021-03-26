@@ -55,7 +55,6 @@ AUTO_CLEAN = True
 MEMORY_LIMIT_MB = 64
 MEMORY_REDUCTION_FACTOR = 0.5
 
-pygame.font.init()
 
 _font_cache = {}
 
@@ -122,8 +121,9 @@ class attrgetter:
     def __reduce__(self):
         return self.__class__, self._attrs
 
-
 # =====================================HEAPQ PARTIAL IMPLEMENTATION==============================================================
+
+
 class HeapqPartial:
     # Код взят из https://github.com/python/cpython/blob/2d1cbe4193499914ccc9d217ea63eb17ff927c91/Lib/heapq.py#L258
     # Поскольку heapq не портирован в Sculpt
@@ -220,21 +220,24 @@ class ImageLoader:
         key = self.cache_key(name, args, kwargs)
         if key in self._cache:
             return self._cache[key]
-        
+
         res = None
         for ext in self.EXTNS:
             path = name + '.' + ext
             try:
                 res = pygame.image.load(path).convert_alpha()
-            except RuntimeError:
+                break
+            except:
                 pass
 
         if res is not None:
             return res
         else:
-            raise 'ImageNotFound'
+            raise ValueError('Image ' + name + ' not found')
+
 
 images = ImageLoader()
+
 
 def getfont(fontname=None, fontsize=None, sysfontname=None,
             bold=None, italic=None, underline=None):
@@ -685,40 +688,40 @@ def clean():
             break
 
 
-def mkref(o):
-    if isinstance(o, MethodType):
-        return weak_method(o)
-    else:
-        try:
-            return ref(o)
-        except TypeError:
-            if isinstance(o, builtin_function_or_method):
-                return lambda: o
-            raise
+# def mkref(o):
+#     if isinstance(o, MethodType):
+#         return weak_method(o)
+#     else:
+#         try:
+#             return ref(o)
+#         except TypeError:
+#             if isinstance(o, builtin_function_or_method):
+#                 return lambda: o
+#             raise
 
 
-@total_ordering
-class Event:
-    """An event scheduled for a future time.
-    Events are ordered by their scheduled execution time.
-    """
+# @total_ordering
+# class Event:
+#     """An event scheduled for a future time.
+#     Events are ordered by their scheduled execution time.
+#     """
 
-    def __init__(self, time, cb, repeat=None):
-        self.time = time
-        self.repeat = repeat
-        self.cb = mkref(cb)
-        self.name = str(cb)
-        self.repeat = repeat
+#     def __init__(self, time, cb, repeat=None):
+#         self.time = time
+#         self.repeat = repeat
+#         self.cb = mkref(cb)
+#         self.name = str(cb)
+#         self.repeat = repeat
 
-    def __lt__(self, ano):
-        return self.time < ano.time
+#     def __lt__(self, ano):
+#         return self.time < ano.time
 
-    def __eq__(self, ano):
-        return self.time == ano.time
+#     def __eq__(self, ano):
+#         return self.time == ano.time
 
-    @property
-    def callback(self):
-        return self.cb()
+#     @property
+#     def callback(self):
+#         return self.cb()
 
 
 class Clock:
@@ -831,11 +834,11 @@ def round_pos(pos):
         x, y = pos
     except TypeError:
         raise TypeError(
-            "Coordinate must be a tuple (not {!r})".format(pos)) from None
+            "Coordinate must be a tuple (not {!r})".format(pos)) 
     try:
         return round(x), round(y)
     except TypeError:
-        raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) from None  # noqa
+        raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) # noqa
 
 
 def make_color(arg):
@@ -875,7 +878,7 @@ class SurfacePainter:
         try:
             iter(points)
         except TypeError:
-            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw") from None  # noqa
+            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw")   # noqa
         points = [round_pos(point) for point in points]
         pygame.draw.polygon(self._surf, make_color(color), points, 1)
 
@@ -884,7 +887,7 @@ class SurfacePainter:
         try:
             iter(points)
         except TypeError:
-            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw") from None  # noqa
+            raise TypeError("screen.draw.filled_polygon() requires an iterable of points to draw")   # noqa
         points = [round_pos(point) for point in points]
         pygame.draw.polygon(self._surf, make_color(color), points, 0)
 
@@ -1005,140 +1008,6 @@ class Keyboard:
 
 
 keyboard = Keyboard()
-
-
-def exit():
-    """Wait for up to a second for all sounds to play out
-    and then exit
-    """
-    pygame.quit()
-
-
-class PGZeroGame:
-    def __init__(self, mod):
-        self.mod = mod
-        self.screen = None
-        self.width = None
-        self.height = None
-        self.title = None
-        self.icon = None
-        self.running = False
-        self.keyboard = keyboard.keyboard
-        self.handlers = {}
-
-    EVENT_HANDLERS = {
-        pygame.MOUSEBUTTONDOWN: 'on_mouse_down',
-        pygame.MOUSEBUTTONUP: 'on_mouse_up',
-        pygame.MOUSEMOTION: 'on_mouse_move',
-        pygame.KEYDOWN: 'on_key_down',
-        pygame.KEYUP: 'on_key_up',
-    }
-
-    def map_buttons(val):
-        return {c for c, pressed in zip(mouse, val) if pressed}
-
-    EVENT_PARAM_MAPPERS = {
-        'buttons': map_buttons,
-        'button': mouse,
-        'key': keys
-    }
-
-    def load_handlers(self):
-        self.handlers = {}
-        for type_, name in self.EVENT_HANDLERS.items():
-            handler = getattr(self.mod, name, None)
-            if callable(handler):
-                self.handlers[type_] = self.prepare_handler(handler)
-
-    def prepare_handler(self, handler):
-        """Adapt a pgzero game's raw handler function to take a Pygame Event.
-        Returns a one-argument function of the form ``handler(event)``.
-        This will ensure that the correct arguments are passed to the raw
-        handler based on its argument spec.
-        The wrapped handler will also map certain parameter values using
-        callables from EVENT_PARAM_MAPPERS; this ensures that the value of
-        'button' inside the handler is a real instance of constants.mouse,
-        which means (among other things) that it will print as a symbolic value
-        rather than a naive integer.
-        """
-        code = handler.__code__
-        param_names = code.co_varnames[:code.co_argcount]
-
-        def make_getter(mapper, getter):
-            if mapper:
-                return lambda event: mapper(getter(event))
-            return getter
-
-        param_handlers = []
-        for name in param_names:
-            getter = attrgetter(name)
-            mapper = self.EVENT_PARAM_MAPPERS.get(name)
-            param_handlers.append((name, make_getter(mapper, getter)))
-
-        def prep_args(event):
-            return {name: get(event) for name, get in param_handlers}
-
-        def new_handler(event):
-            try:
-                prepped = prep_args(event)
-            except ValueError:
-                # If we couldn't construct the keys/mouse objects representing
-                # the button that was pressed, then skip the event handler.
-                #
-                # This happens because Pygame can generate key codes that it
-                # does not have constants for.
-                return
-            else:
-                return handler(**prepped)
-
-        return new_handler
-
-    def dispatch_event(self, event):
-        handler = self.handlers.get(event.type)
-        if handler:
-            self.need_redraw = True
-            handler(event)
-
-    def get_update_func(self):
-        """Get a one-argument update function.
-        If the module defines a function matching ::
-            update(dt)
-        or ::
-            update()
-        then this will be called. Otherwise return a no-op function.
-        """
-        try:
-            update = self.mod.update
-        except AttributeError:
-            return None
-        else:
-            if update.__code__.co_argcount == 0:
-                return lambda dt: update()
-            return update
-
-    def get_draw_func(self):
-        """Get a draw function.
-        If no draw function is define, raise an exception.
-        """
-        try:
-            draw = self.mod.draw
-        except AttributeError:
-            return lambda: None
-        else:
-            if draw.__code__.co_argcount != 0:
-                raise TypeError(
-                    "draw() must not take any arguments."
-                )
-            return draw
-
-    def run(self):
-        pass
-
-
-def positional_parameters(handler):
-    """Get the positional parameters of the given function."""
-    code = handler.__code__
-    return code.co_varnames[:code.co_argcount]
 
 
 class ZRect:
@@ -1620,7 +1489,7 @@ class ZRect:
         return [i for i in dict.items() if self.colliderect(val(i))]
 
 
-RECT_CLASSES = (pygame.rect.Rect, ZRect)
+RECT_CLASSES = (pygame.Rect, ZRect)
 
 
 def calculate_anchor(value, dim, total):
@@ -1811,7 +1680,7 @@ class Actor:
 
     def _calc_anchor(self):
         ax, ay = self._anchor_value
-        ow, oh = self._orig_surf.get_size()
+        ow, oh = list(map(int, self._orig_surf.get_size())) #По каким то причинам идет возврат str а не int
         ax = calculate_anchor(ax, 'x', ow)
         ay = calculate_anchor(ay, 'y', oh)
         self._untransformed_anchor = ax, ay
@@ -1827,7 +1696,7 @@ class Actor:
     @angle.setter
     def angle(self, angle):
         self._angle = angle
-        w, h = self._orig_surf.get_size()
+        w, h = list(map(int, self._orig_surf.get_size()))#По каким то причинам идет возврат str а не int
 
         ra = radians(angle)
         sin_a = sin(ra)
@@ -1895,18 +1764,18 @@ class Actor:
     def image(self, image):
         self._image_name = image
         self._orig_surf = images.load(image)
-        self._surface_cache.clear()  # Clear out old image's cache.
+        del self._surface_cache[:]  # Clear out old image's cache.
         self._update_pos()
 
     def _update_pos(self):
         p = self.pos
-        self.width, self.height = self._orig_surf.get_size()
+        self.width, self.height = list(map(int, self._orig_surf.get_size()))
         self._calc_anchor()
         self.pos = p
 
     def draw(self):
         s = self._build_transformed_surf()
-        game.screen.blit(s, self.topleft)
+        screen.blit(s, self.topleft)
 
     def angle_to(self, target):
         """Return the angle from this actors position to target, in degrees."""
@@ -1932,3 +1801,81 @@ class Actor:
 
     def unload_image(self):
         images.unload(self._image_name)
+
+
+def exit(e):
+    if e.type == pygame.QUIT:
+        pygame.quit()
+
+
+def draw():
+    pass
+
+
+def update(dt):
+    pass
+
+
+def on_mouse_down(button, pos):
+    pass
+
+
+def init():
+    pygame.init()
+    screen = pygame.display.set_mode((100, 100))
+    screen = Screen(screen)
+    pygame.display.set_caption('TITLE')
+    clock = pygame.time.Clock()
+    return screen, clock
+
+
+screen, clock_pg = init()
+
+# ========================================= TESTING AREA ==============================================================
+alien = Actor('alien')
+
+TITLE = "Alien walk"
+WIDTH = 500
+HEIGHT = alien.height + 20
+
+
+# The initial position of the alien
+alien.topright = 0, 10
+
+
+def draw():
+    """Clear the screen and draw the alien."""
+    screen.clear()
+    alien.draw()
+
+
+def update():
+    """Move the alien by one pixel."""
+    alien.x += 1
+
+    # If the alien is off the right hand side of the screen,
+    # move it back off screen to the left-hand side
+    if alien.left > WIDTH:
+        alien.right = 0
+
+# ========================================== MAIN LOOP ==================================================================
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+screen = Screen(screen)
+pygame.display.set_caption(TITLE)
+
+GRAY = (200, 200, 200)
+FPS = 60
+while True:
+    # dt = 1
+    for e in pygame.event.get():
+        exit(e)
+        if e.type == pygame.MOUSEBUTTONDOWN:
+            # Button press handler
+            pos = pygame.mouse.get_pos()
+            on_mouse_down(e.button, pos)
+
+    update()
+    draw()
+    pygame.display.update()
+    clock_pg.tick(FPS)

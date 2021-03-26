@@ -700,28 +700,28 @@ def clean():
 #             raise
 
 
-# @total_ordering
-# class Event:
-#     """An event scheduled for a future time.
-#     Events are ordered by their scheduled execution time.
-#     """
 
-#     def __init__(self, time, cb, repeat=None):
-#         self.time = time
-#         self.repeat = repeat
-#         self.cb = mkref(cb)
-#         self.name = str(cb)
-#         self.repeat = repeat
+class Event:
+    """An event scheduled for a future time.
+    Events are ordered by their scheduled execution time.
+    """
 
-#     def __lt__(self, ano):
-#         return self.time < ano.time
+    def __init__(self, time, cb, repeat=None):
+        self.time = time
+        self.repeat = repeat
+        self.cb = cb
+        self.name = str(cb)
+        self.repeat = repeat
 
-#     def __eq__(self, ano):
-#         return self.time == ano.time
+    def __lt__(self, ano):
+        return self.time < ano.time
 
-#     @property
-#     def callback(self):
-#         return self.cb()
+    def __eq__(self, ano):
+        return self.time == ano.time
+
+    @property
+    def callback(self):
+        return self.cb()
 
 
 class Clock:
@@ -787,7 +787,7 @@ class Clock:
         Unlike the standard scheduler functions, the callable is passed the
         elapsed clock time since the last call (the same value passed to tick).
         """
-        self._each_tick.append(mkref(callback))
+        self._each_tick.append(callback)
 
     def _fire_each_tick(self, dt):
         dead = [None]
@@ -823,8 +823,6 @@ class Clock:
             try:
                 cb()
             except Exception:
-                import traceback
-                traceback.print_exc()
                 self.unschedule(cb)
 
 
@@ -957,14 +955,7 @@ class Screen:
     def __repr__(self):
         return "<Screen width={} height={}>".format(self.width, self.height)
 
-# One instance of a clock is available by default, to simplify the API
-# clock = Clock()
-# tick = clock.tick
-# schedule = clock.schedule
-# schedule_interval = clock.schedule_interval
-# schedule_unique = clock.schedule_unique
-# unschedule = clock.unschedule
-# each_tick = clock.each_tick
+
 
 
 class Keyboard:
@@ -1831,6 +1822,13 @@ def init():
 
 screen, clock_pg = init()
 
+clock = Clock()
+tick = clock.tick
+schedule = clock.schedule
+schedule_interval = clock.schedule_interval
+schedule_unique = clock.schedule_unique
+unschedule = clock.unschedule
+each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
 alien = Actor('alien')
 
@@ -1858,22 +1856,41 @@ def update():
     if alien.left > WIDTH:
         alien.right = 0
 
+
+def on_mouse_down(button, pos):
+    """Detect clicks on the alien."""
+    if alien.collidepoint(pos):
+        set_alien_hurt()
+
+
+def set_alien_hurt():
+    """Set the current alien sprite to the "hurt" image."""
+    alien.image = 'alien_hurt'
+    clock.schedule_unique(set_alien_normal, 1)
+
+
+def set_alien_normal():
+    """Set the current alien sprite to the normal image."""
+    alien.image = 'alien'
+
 # ========================================== MAIN LOOP ==================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 screen = Screen(screen)
 pygame.display.set_caption(TITLE)
 
-GRAY = (200, 200, 200)
 FPS = 60
 while True:
-    # dt = 1
+    dt = pygame.time.get_ticks() / 10000
+    print(dt)
+    clock.tick(dt)
     for e in pygame.event.get():
         exit(e)
         if e.type == pygame.MOUSEBUTTONDOWN:
             # Button press handler
             pos = pygame.mouse.get_pos()
             on_mouse_down(e.button, pos)
+            
 
     update()
     draw()

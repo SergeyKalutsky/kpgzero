@@ -2085,12 +2085,18 @@ while True:
     dt = pygame.time.get_ticks() / 100000
     print(dt)
     clock.tick(dt)
-    for e in pygame.event.get():
-        exit(e)
-        if e.type == pygame.MOUSEBUTTONDOWN:
+    for event in pygame.event.get():
+        exit(event)
+        if event.type == pygame.MOUSEBUTTONDOWN:
             # Button press handler
             pos = pygame.mouse.get_pos()
             on_mouse_down(e.button, pos)
+
+        if event.type == pygame.KEYDOWN:
+            keyboard._press(event.key)
+
+        elif event.type == pygame.KEYUP:
+            keyboard._release(event.key)
             
 
     update()

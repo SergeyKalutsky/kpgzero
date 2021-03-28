@@ -75,36 +75,6 @@ KEYS = {'AC_BACK': 1073742094,
         'ASTERISK': 42, 'PLUS': 43, 'COLON': 58, 'LESS': 60, 
         'GREATER': 62, 'QUESTION': 63, 'AT': 64, 'CARET': 94, 'UNDERSCORE': 95}
 
-# Event type indicating the end of a music track
-MUSIC_END = 99
-
-
-class mouse(IntEnum):
-    LEFT = 1
-    MIDDLE = 2
-    RIGHT = 3
-    WHEEL_UP = 4
-    WHEEL_DOWN = 5
-
-
-# Use a code generation approach to copy Pygame's key constants out into
-# a Python 3.4 IntEnum, stripping prefixes where possible
-srclines = ["class keys(IntEnum):"]
-for k, v in vars(pygame.locals).items():
-    if k.startswith('K_'):
-        if k[2].isalpha():
-            k = k[2:]
-        srclines.append("    %s = %d" % (k.upper(), v))
-
-srclines.append("class keymods(IntEnum):")
-for k, v in vars(pygame.locals).items():
-    if k.startswith('KMOD_'):
-        srclines.append("    %s = %d" % (k[5:].upper(), v))
-
-exec('\n'.join(srclines), globals())
-# # enum_list = list(map(int, keys))
-# # print(enum_list)
-
 
 class Keyboard:
     """The current state of the keyboard.
@@ -142,33 +112,32 @@ class Keyboard:
 
 
 keyboard = Keyboard()
-print(keyboard['A'])
-# def exit(e):
-#     if e.type == pygame.QUIT:
-#         pygame.quit()
+def exit(e):
+    if e.type == pygame.QUIT:
+        pygame.quit()
 
 
-# def init():
-#     pygame.init()
-#     screen = pygame.display.set_mode((200, 200))
-#     pygame.display.set_caption('TITLE')
-#     clock = pygame.time.Clock()
-#     return screen, clock
+def init():
+    pygame.init()
+    screen = pygame.display.set_mode((200, 200))
+    pygame.display.set_caption('TITLE')
+    clock = pygame.time.Clock()
+    return screen, clock
 
-# screen, clock_pg = init()
+screen, clock_pg = init()
 
-# FPS = 60
-# while True:
-#     for event in pygame.event.get():
-#         exit(event)
+FPS = 60
+while True:
+    for event in pygame.event.get():
+        exit(event)
 
-#         if event.type == pygame.KEYDOWN:
-#             print(event.key)
-#             # keyboard._press(event.key)
+        if event.type == pygame.KEYDOWN:
+            keyboard._press(event.key)
 
-#         # elif event.type == pygame.KEYUP:
-#         #     keyboard._release(event.key)
+        elif event.type == pygame.KEYUP:
+            keyboard._release(event.key)
+    
+    print(keyboard._pressed)
 
-
-#     pygame.display.update()
-#     clock_pg.tick(FPS)
+    pygame.display.update()
+    clock_pg.tick(FPS)

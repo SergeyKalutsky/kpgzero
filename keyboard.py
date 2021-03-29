@@ -136,8 +136,8 @@ while True:
 
         elif event.type == pygame.KEYUP:
             keyboard._release(event.key)
-    
-    print(keyboard._pressed)
 
+    print(keyboard.a)
+    
     pygame.display.update()
     clock_pg.tick(FPS)

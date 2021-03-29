@@ -1,4 +1,5 @@
 from types import MethodType
+import time
 import re
 import pygame
 import time
@@ -914,7 +915,9 @@ class Clock:
             if cb is not None:
                 self.fired = True
                 try:
-                    cb(dt)
+                    func = cb(dt)
+                    if func:
+                        self.schedule_unique(func, 1)
                 except:
                     pass
         self._each_tick = [e for e in self._each_tick if e() not in dead]
@@ -2118,7 +2121,7 @@ class Animation:
             n = 1
             self.stop(complete=True)
             if self.on_finished is not None:
-                self.on_finished()
+                return self.on_finished
             return
         n = self.function(n)
         for k in self.targets:
@@ -2251,7 +2254,7 @@ def move_block():
     block_id += 1
 
 
-def move_ship():
+def next_ship_target():
     """Pick a new target for the ship and rotate to face it."""
     x = random.randint(100, 300)
     y = random.randint(100, 300)
@@ -2264,23 +2267,24 @@ def move_ship():
         ship,
         angle=target_angle,
         duration=0.3,
-        # on_finished=move_ship,
+        on_finished=move_ship,
     )
 
-    animate(
+
+def move_ship():
+    """Move the ship to the target."""
+    anim = animate(
         ship,
         tween='accel_decel',
         pos=ship.target,
         duration=ship.distance_to(ship.target) / 200,
-        # on_finished=next_ship_target,
+        on_finished=next_ship_target,
     )
 
 
-
-move_block()  # start one move now
-clock.schedule_interval(move_block, 1)  # schedule subsequent moves
-clock.schedule_interval(move_ship, 1)  # schedule subsequent moves
-
+next_ship_target()
+move_block()  # start one move nos
+clock.schedule_interval(move_block, 2)  # schedule subsequent moves
 # ========================================== MAIN LOOP ==================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

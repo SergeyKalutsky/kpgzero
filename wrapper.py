@@ -848,7 +848,7 @@ class Event:
 
     @property
     def callback(self):
-        return self.cb()
+        return self.cb
 
 
 class Clock:
@@ -933,7 +933,7 @@ class Clock:
         :param dt: The elapsed time in seconds.
         """
         self.fired = False
-        self.t += float(dt)
+        self.t += float(dt) - self.t
         self._fire_each_tick(dt)
         while self.events and self.events[0].time <= self.t:
             ev = heapq.heappop(self.events)
@@ -2220,27 +2220,41 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
-WIDTH = 300
-HEIGHT = 300
+alien = Actor('alien', anchor=('middle', 'bottom'))
+
+TITLE = "Alien walk"
+WIDTH = 500
+HEIGHT = alien.height + 100
+GROUND = HEIGHT - 10
+
+# The initial position of the alien
+alien.left = 0
+alien.y = GROUND
+
 
 def draw():
-    r = 255
-    g = 0
-    b = 0
+    """Clear the screen and draw the alien."""
+    screen.fill((0, 0, 0))
+    alien.draw()
 
-    width = WIDTH
-    height = HEIGHT - 200
 
-    for i in range(20):
-        rect = Rect((0, 0), (width, height))
-        rect.center = 150, 150
-        screen.draw.rect(rect, (r, g, b))
+def update(dt):
+    """Move the alien around using the keyboard."""
+    if keyboard.left:
+        alien.x -= 2
+    elif keyboard.right:
+        alien.x += 2
 
-        r -= 10
-        g += 10
+    if keyboard.space:
+        alien.y = GROUND - 50
+        animate(alien, y=GROUND, tween='bounce_end', duration=.5)
 
-        width -= 10
-        height += 10
+    # If the alien is off the screen,
+    # move it back on screen
+    if alien.right > WIDTH:
+        alien.right = WIDTH
+    elif alien.left < 0:
+        alien.left = 0
 
 # ========================================== MAIN LOOP ==================================================================
 
@@ -2248,9 +2262,11 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 screen = Screen(screen)
 pygame.display.set_caption(TITLE)
 
-FPS = 60
+
+FPS = 30
+
 while True:
-    dt = pygame.time.get_ticks() / 1000000
+    dt = pygame.time.get_ticks() / 1000
     clock.tick(dt)
     for event in pygame.event.get():
         exit(event)

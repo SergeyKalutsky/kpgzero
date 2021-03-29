@@ -15,7 +15,7 @@ def draw():
     alien.draw()
 
 
-def update(dt):
+def update():
     """Move the alien by one pixel."""
     alien.x += 1
 

@@ -4,6 +4,7 @@ import pygame
 import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
+PLATFORM = False
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -1097,7 +1098,7 @@ class Keyboard:
         if kname == 'enter':
             kname = 'return'
         try:
-            key = KEYS[kname.upper()]
+            key = KEYS[kname.upper()] if not PLATFORM else KEYS_PLATFORM[kname.upper()]
         except AttributeError:
             raise AttributeError('The key "%s" does not exist' % key)
         return key in self._pressed
@@ -1122,7 +1123,7 @@ class Keys:
         if kname == 'enter':
             kname = 'return'
         try:
-            key = KEYS[kname.upper()]
+            key = KEYS[kname.upper()] if not PLATFORM else KEYS_PLATFORM[kname.upper()]
         except AttributeError:
             raise AttributeError('The key "%s" does not exist' % key)
         return key
@@ -1130,6 +1131,27 @@ class Keys:
 
 keyboard = Keyboard()
 keys = Keys()
+
+class Rect(pygame.Rect):
+    __slots__ = ()
+
+    # From Pygame docs
+    VALID_ATTRIBUTES = """
+        x y
+        top  left  bottom  right
+        topleft  bottomleft  topright  bottomright
+        midtop  midleft  midbottom  midright
+        center  centerx  centery
+        size  width  height
+        w h
+    """.split()
+
+    def __setattr__(self, key, value):
+        try:
+            pygame.Rect.__setattr__(self, key, value)
+        except AttributeError as e:
+            raise e
+
 
 class ZRect:
     """ZRect
@@ -2181,12 +2203,12 @@ def on_key_up(key):
 
 def init():
     pygame.init()
-    screen = pygame.display.set_mode((100, 100))
+    screen = pygame.display.set_mode((1, 1))
     screen = Screen(screen)
-    pygame.display.set_caption('TITLE')
     clock = pygame.time.Clock()
     return screen, clock
 
+TITLE = 'UNTITLED'
 
 screen, clock_pg = init()
 
@@ -2198,56 +2220,28 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
-TITLE = 'Flappy Ball'
-WIDTH = 800
-HEIGHT = 600
-
-BLUE = (0, 128, 255)
-GRAVITY = 2000.0  # pixels per second per second
-
-
-class Ball:
-    def __init__(self, initial_x, initial_y):
-        self.x = initial_x
-        self.y = initial_y
-        self.vx = 200
-        self.vy = 0
-        self.radius = 20
-
-    def draw(self):
-        pos = (self.x, self.y)
-        screen.draw.filled_circle(pos, self.radius, BLUE)
-
-
-ball = Ball(50, 100)
-
+WIDTH = 300
+HEIGHT = 300
 
 def draw():
-    screen.clear()
-    ball.draw()
+    r = 255
+    g = 0
+    b = 0
 
+    width = WIDTH
+    height = HEIGHT - 200
 
-def update(dt):
-    # Apply constant acceleration formulae
-    uy = ball.vy
-    ball.vy += GRAVITY * dt
-    ball.y += (uy + ball.vy) * 0.5 * dt
+    for i in range(20):
+        rect = Rect((0, 0), (width, height))
+        rect.center = 150, 150
+        screen.draw.rect(rect, (r, g, b))
 
-    # detect and handle bounce
-    if ball.y > HEIGHT - ball.radius:  # we've bounced!
-        ball.y = HEIGHT - ball.radius  # fix the position
-        ball.vy = -ball.vy * 0.9  # inelastic collision
+        r -= 10
+        g += 10
 
-    # X component doesn't have acceleration
-    ball.x += ball.vx * dt
-    if ball.x > WIDTH - ball.radius or ball.x < ball.radius:
-        ball.vx = -ball.vx
+        width -= 10
+        height += 10
 
-
-def on_key_down(key):
-    """Pressing a key will kick the ball upwards."""
-    if key == keys.SPACE:
-        ball.vy = -500
 # ========================================== MAIN LOOP ==================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

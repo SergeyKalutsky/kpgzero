@@ -1117,8 +1117,19 @@ class Keyboard:
         return "<Keyboard pressed={}>".format(self._pressed)
 
 
-keyboard = Keyboard()
+class Keys:
+    def __getattr__(self, kname):
+        if kname == 'enter':
+            kname = 'return'
+        try:
+            key = KEYS[kname.upper()]
+        except AttributeError:
+            raise AttributeError('The key "%s" does not exist' % key)
+        return key
 
+
+keyboard = Keyboard()
+keys = Keys()
 
 class ZRect:
     """ZRect
@@ -2151,6 +2162,23 @@ def on_mouse_down(button, pos):
     pass
 
 
+def on_mouse_up(button, pos):
+    pass
+
+
+def on_mouse_move():
+    pass
+
+
+def on_key_down(key):
+    pass
+
+
+def on_key_up(key):
+    pass
+
+
+
 def init():
     pygame.init()
     screen = pygame.display.set_mode((100, 100))
@@ -2170,41 +2198,56 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
+TITLE = 'Flappy Ball'
+WIDTH = 800
+HEIGHT = 600
 
-alien = Actor('alien', anchor=('middle', 'bottom'))
-TITLE = "Alien walk"
-WIDTH = 500
-HEIGHT = alien.height + 100
-GROUND = HEIGHT - 10
+BLUE = (0, 128, 255)
+GRAVITY = 2000.0  # pixels per second per second
 
-# The initial position of the alien
-alien.left = 0
-alien.y = GROUND
+
+class Ball:
+    def __init__(self, initial_x, initial_y):
+        self.x = initial_x
+        self.y = initial_y
+        self.vx = 200
+        self.vy = 0
+        self.radius = 20
+
+    def draw(self):
+        pos = (self.x, self.y)
+        screen.draw.filled_circle(pos, self.radius, BLUE)
+
+
+ball = Ball(50, 100)
 
 
 def draw():
-    """Clear the screen and draw the alien."""
-    screen.fill((0, 0, 0))
-    alien.draw()
+    screen.clear()
+    ball.draw()
 
 
 def update(dt):
-    """Move the alien around using the keyboard."""
-    if keyboard.left:
-        alien.x -= 2
-    elif keyboard.right:
-        alien.x += 2
+    # Apply constant acceleration formulae
+    uy = ball.vy
+    ball.vy += GRAVITY * dt
+    ball.y += (uy + ball.vy) * 0.5 * dt
 
-    if keyboard.space:
-        alien.y = GROUND - 50
-        animate(alien, y=GROUND, tween='bounce_end', duration=.5)
+    # detect and handle bounce
+    if ball.y > HEIGHT - ball.radius:  # we've bounced!
+        ball.y = HEIGHT - ball.radius  # fix the position
+        ball.vy = -ball.vy * 0.9  # inelastic collision
 
-    # If the alien is off the screen,
-    # move it back on screen
-    if alien.right > WIDTH:
-        alien.right = WIDTH
-    elif alien.left < 0:
-        alien.left = 0
+    # X component doesn't have acceleration
+    ball.x += ball.vx * dt
+    if ball.x > WIDTH - ball.radius or ball.x < ball.radius:
+        ball.vx = -ball.vx
+
+
+def on_key_down(key):
+    """Pressing a key will kick the ball upwards."""
+    if key == keys.SPACE:
+        ball.vy = -500
 # ========================================== MAIN LOOP ==================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -2213,7 +2256,7 @@ pygame.display.set_caption(TITLE)
 
 FPS = 60
 while True:
-    dt = pygame.time.get_ticks() / 100000
+    dt = pygame.time.get_ticks() / 1000000
     clock.tick(dt)
     for event in pygame.event.get():
         exit(event)
@@ -2221,12 +2264,15 @@ while True:
             # Button press handler
             pos = pygame.mouse.get_pos()
             on_mouse_down(event.button, pos)
+            on_mouse_up(event.button, pos)
 
         if event.type == pygame.KEYDOWN:
             keyboard._press(event.key)
+            on_key_down(event.key)
 
         elif event.type == pygame.KEYUP:
             keyboard._release(event.key)
+            on_key_up(event.key)
 
     update(dt)
     draw()

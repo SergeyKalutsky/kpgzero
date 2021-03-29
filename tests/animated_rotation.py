@@ -27,6 +27,7 @@ def draw():
 
 def move_block():
     """Move the block to the next position over 1 second."""
+    global block_id
     block_id %= 4
     animate(
         block,
@@ -34,6 +35,7 @@ def move_block():
         duration=1,
         pos=BLOCK_POSITIONS[block_id]
     )
+    block_id += 1
 
 
 def next_ship_target():

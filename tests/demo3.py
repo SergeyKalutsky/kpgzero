@@ -15,7 +15,7 @@ def draw():
     alien.draw()
 
 
-def update():
+def update(dt):
     """Move the alien by one pixel."""
     alien.x += 1
 
@@ -25,7 +25,7 @@ def update():
         alien.right = 0
 
 
-def on_mouse_down(pos):
+def on_mouse_down(button, pos):
     """Detect clicks on the alien."""
     if alien.collidepoint(pos):
         set_alien_hurt()
@@ -34,7 +34,6 @@ def on_mouse_down(pos):
 def set_alien_hurt():
     """Set the current alien sprite to the "hurt" image."""
     alien.image = 'alien_hurt'
-    sounds.eep.play()
     clock.schedule_unique(set_alien_normal, 1.0)
 
 

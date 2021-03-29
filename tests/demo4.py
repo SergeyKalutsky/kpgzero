@@ -16,7 +16,7 @@ def draw():
     alien.draw()
 
 
-def update():
+def update(dt):
     """Move the alien around using the keyboard."""
     if keyboard.left:
         alien.x -= 2

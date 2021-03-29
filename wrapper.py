@@ -815,17 +815,8 @@ def clean():
             break
 
 
-# def mkref(o):
-#     if isinstance(o, MethodType):
-#         return weak_method(o)
-#     else:
-#         try:
-#             return ref(o)
-#         except TypeError:
-#             if isinstance(o, builtin_function_or_method):
-#                 return lambda: o
-#             raise
-
+def mkref(o):
+    return lambda: o
 
 
 class Event:
@@ -836,7 +827,7 @@ class Event:
     def __init__(self, time, cb, repeat=None):
         self.time = time
         self.repeat = repeat
-        self.cb = cb
+        self.cb = mkref(cb)
         self.name = str(cb)
         self.repeat = repeat
 
@@ -848,7 +839,7 @@ class Event:
 
     @property
     def callback(self):
-        return self.cb
+        return self.cb()
 
 
 class Clock:
@@ -907,33 +898,33 @@ class Clock:
             if e.callback is not None
         ]
         heapq.heapify(self.events)
-        self._each_tick = [e for e in self._each_tick if e(dt) != callback]
+        self._each_tick = [e for e in self._each_tick if e() != callback]
 
     def each_tick(self, callback):
         """Schedule a callback to be called every tick.
         Unlike the standard scheduler functions, the callable is passed the
         elapsed clock time since the last call (the same value passed to tick).
         """
-        self._each_tick.append(callback)
+        self._each_tick.append(mkref(callback))
 
     def _fire_each_tick(self, dt):
         dead = [None]
         for r in self._each_tick:
-            cb = r
+            cb = r()
             if cb is not None:
                 self.fired = True
                 try:
                     cb(dt)
                 except:
                     pass
-        self._each_tick = [e for e in self._each_tick if e(dt) not in dead]
+        self._each_tick = [e for e in self._each_tick if e() not in dead]
 
     def tick(self, dt):
         """Update the clock time and fire all scheduled events.
         :param dt: The elapsed time in seconds.
         """
         self.fired = False
-        self.t += float(dt) - self.t
+        self.t += float(dt)
         self._fire_each_tick(dt)
         while self.events and self.events[0].time <= self.t:
             ev = heapq.heappop(self.events)
@@ -961,7 +952,7 @@ def round_pos(pos):
     try:
         return round(x), round(y)
     except TypeError:
-        raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) # noqa
+        raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) 
 
 
 def make_color(arg):
@@ -2220,41 +2211,77 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
-alien = Actor('alien', anchor=('middle', 'bottom'))
+import random
 
-TITLE = "Alien walk"
-WIDTH = 500
-HEIGHT = alien.height + 100
-GROUND = HEIGHT - 10
+WIDTH = 400
+HEIGHT = 400
 
-# The initial position of the alien
-alien.left = 0
-alien.y = GROUND
+
+BLOCK_POSITIONS = [
+    (350, 50),
+    (350, 350),
+    (50, 350),
+    (50, 50),
+]
+block_id = 0
+
+block = Actor('block', center=(50, 50))
+ship = Actor('ship', center=(200, 200))
 
 
 def draw():
-    """Clear the screen and draw the alien."""
-    screen.fill((0, 0, 0))
-    alien.draw()
+    screen.clear()
+    block.draw()
+    ship.draw()
 
 
-def update(dt):
-    """Move the alien around using the keyboard."""
-    if keyboard.left:
-        alien.x -= 2
-    elif keyboard.right:
-        alien.x += 2
+# Block movement
+# --------------
 
-    if keyboard.space:
-        alien.y = GROUND - 50
-        animate(alien, y=GROUND, tween='bounce_end', duration=.5)
+def move_block():
+    """Move the block to the next position over 1 second."""
+    global block_id
+    block_id %= 4
+    animate(
+        block,
+        'bounce_end',
+        duration=1,
+        pos=BLOCK_POSITIONS[block_id]
+    )
+    block_id += 1
 
-    # If the alien is off the screen,
-    # move it back on screen
-    if alien.right > WIDTH:
-        alien.right = WIDTH
-    elif alien.left < 0:
-        alien.left = 0
+
+def next_ship_target():
+    """Pick a new target for the ship and rotate to face it."""
+    x = random.randint(100, 300)
+    y = random.randint(100, 300)
+    ship.target = x, y
+
+    target_angle = ship.angle_to(ship.target)
+    target_angle += 360 * ((ship.angle - target_angle + 180) // 360)
+
+    animate(
+        ship,
+        angle=target_angle,
+        duration=0.3,
+        on_finished=move_ship,
+    )
+
+
+def move_ship():
+    """Move the ship to the target."""
+    anim = animate(
+        ship,
+        tween='accel_decel',
+        pos=ship.target,
+        duration=ship.distance_to(ship.target) / 200,
+        on_finished=next_ship_target,
+    )
+
+
+next_ship_target()
+move_block()  # start one move now
+clock.schedule_interval(move_block, 2)  # schedule subsequent moves
 
 # ========================================== MAIN LOOP ==================================================================
 
@@ -2266,7 +2293,7 @@ pygame.display.set_caption(TITLE)
 FPS = 30
 
 while True:
-    dt = pygame.time.get_ticks() / 1000
+    dt = pygame.time.get_ticks() / 1000 - clock.t
     clock.tick(dt)
     for event in pygame.event.get():
         exit(event)

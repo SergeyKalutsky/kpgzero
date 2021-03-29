@@ -78,7 +78,7 @@ KEYS = {'AC_BACK': 1073742094,
         'KP_DIVIDE': 1073741908, 'KP_MULTIPLY': 1073741909, 
         'KP_MINUS': 1073741910, 'KP_PLUS': 1073741911, 
         'KP_ENTER': 1073741912, 'KP_EQUALS': 1073741927, 'UP': 1073741906,
-        'DOWN': 1073741905, 'RIGHT': 1073741903, 'LEFT': 276,#1073741904, 
+        'DOWN': 1073741905, 'RIGHT': 1073741903, 'LEFT': 1073741904, 
         'INSERT': 1073741897, 'HOME': 1073741898, 'END': 1073741901, 
         'PAGEUP': 1073741899, 'PAGEDOWN': 1073741902, 'F1': 1073741882, 
         'F2': 1073741883, 'F3': 1073741884, 'F4': 1073741885, 'F5': 1073741886, 
@@ -906,7 +906,7 @@ class Clock:
             if e.callback is not None
         ]
         heapq.heapify(self.events)
-        self._each_tick = [e for e in self._each_tick if e() != callback]
+        self._each_tick = [e for e in self._each_tick if e(dt) != callback]
 
     def each_tick(self, callback):
         """Schedule a callback to be called every tick.
@@ -918,16 +918,14 @@ class Clock:
     def _fire_each_tick(self, dt):
         dead = [None]
         for r in self._each_tick:
-            cb = r()
+            cb = r
             if cb is not None:
                 self.fired = True
                 try:
                     cb(dt)
-                except Exception:
-                    import traceback
-                    traceback.print_exc()
-                    dead.append(cb)
-        self._each_tick = [e for e in self._each_tick if e() not in dead]
+                except:
+                    pass
+        self._each_tick = [e for e in self._each_tick if e(dt) not in dead]
 
     def tick(self, dt):
         """Update the clock time and fire all scheduled events.
@@ -1915,8 +1913,6 @@ class Actor:
         images.unload(self._image_name)
 
 
-TWEEN_FUNCTIONS = {}
-
 
 def linear(n):
     return n
@@ -2017,6 +2013,20 @@ def tween_attr(n, start, end):
     else:
         return tween(n, start, end)
 
+
+TWEEN_FUNCTIONS = {
+    'linear': linear,
+    'accelerate': accelerate,
+    'decelerate': decelerate,
+    'accel_decel': accel_decel,
+    'in_elastic': in_elastic,
+    'out_elastic':out_elastic,
+    'in_out_elastic': in_out_elastic,
+    'bounce_end': bounce_end,
+    'bounce_start': bounce_start,
+    'bounce_start_end': bounce_start_end
+
+}
 
 class Animation:
     """An animation manager for object attribute animations.
@@ -2187,7 +2197,7 @@ def update(dt):
 
     if keyboard.space:
         alien.y = GROUND - 50
-        # animate(alien, y=GROUND, tween='bounce_end', duration=.5)
+        animate(alien, y=GROUND, tween='bounce_end', duration=.5)
 
     # If the alien is off the screen,
     # move it back on screen
@@ -2204,7 +2214,6 @@ pygame.display.set_caption(TITLE)
 FPS = 60
 while True:
     dt = pygame.time.get_ticks() / 100000
-    print(dt)
     clock.tick(dt)
     for event in pygame.event.get():
         exit(event)
@@ -2218,7 +2227,6 @@ while True:
 
         elif event.type == pygame.KEYUP:
             keyboard._release(event.key)
-            
 
     update(dt)
     draw()

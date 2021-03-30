@@ -38,7 +38,7 @@ def move_block():
     block_id += 1
 
 
-def next_ship_target():
+def move_ship():
     """Pick a new target for the ship and rotate to face it."""
     x = random.randint(100, 300)
     y = random.randint(100, 300)
@@ -51,21 +51,16 @@ def next_ship_target():
         ship,
         angle=target_angle,
         duration=0.3,
-        on_finished=move_ship,
     )
 
-
-def move_ship():
-    """Move the ship to the target."""
-    anim = animate(
+    animate(
         ship,
         tween='accel_decel',
         pos=ship.target,
         duration=ship.distance_to(ship.target) / 200,
-        on_finished=next_ship_target,
     )
 
 
-next_ship_target()
 move_block()  # start one move now
-clock.schedule_interval(move_block, 2)  # schedule subsequent moves
+clock.schedule_interval(move_ship, 2)  # schedule subsequent moves
+clock.schedule_interval(move_block, 2)

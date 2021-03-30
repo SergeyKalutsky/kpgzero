@@ -4,7 +4,7 @@ import pygame
 import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
-PLATFORM = True
+PLATFORM = False
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -698,7 +698,7 @@ class Ptext:
              topleft=None, bottomleft=None, topright=None, bottomright=None,
              midtop=None, midleft=None, midbottom=None, midright=None,
              center=None, centerx=None, centery=None,
-             width=None,	widthem=None, lineheight=None, strip=None,
+             width=None, twidthem=None, lineheight=None, strip=None,
              align=None,
              owidth=None, ocolor=None,
              shadow=None, scolor=None,
@@ -1182,7 +1182,7 @@ class ZRect:
     _item_mapping = dict(enumerate("xywh"))
 
     def __init__(self, *args):
-
+        
         if len(args) == 1:
             args = tuple(self._handle_one_arg(args[0]))
 
@@ -1204,9 +1204,9 @@ class ZRect:
                 "%s should be called with one, two or four arguments"
                 % (self.__class__.__name__)
             )
-
+        
         self.rect = self
-
+    
     def _handle_one_arg(self, arg):
         """Handle -- possibly recursively -- the case of one parameter
         Pygame -- and consequently pgzero -- is very accommodating when constructing
@@ -1220,14 +1220,15 @@ class ZRect:
         #
         # If the arg is an existing rect, return its elements
         #
+        
         if isinstance(arg, RECT_CLASSES):
             return arg.x, arg.y, arg.w, arg.h
-
         #
         # If it's something with a .rect attribute, start again with
         # that attribute, calling it first if it's callable
         #
         if hasattr(arg, "rect"):
+            raise str(arg)
             rectobj = arg.rect
             if callable(rectobj):
                 rectobj = rectobj()
@@ -1236,6 +1237,7 @@ class ZRect:
         #
         # Otherwise, we assume it's an iterable of four elements
         #
+        
         return arg
 
     def __repr__(self):
@@ -1743,12 +1745,16 @@ class Actor:
 
         self.image = image
         self._init_position(pos, anchor, **kwargs)
+    
 
     def __getattr__(self, attr):
         if attr in self.__class__.DELEGATED_ATTRIBUTES:
             return getattr(self._rect, attr)
+        elif attr in dir(self):
+            return getattr(self._rect, attr)
         else:
-            return object.__getattribute__(self, attr)
+            raise AttributeError('error')
+            # return object.__getattribute__(self, attr)
 
     def __setattr__(self, attr, value):
         """Assign rect attributes to the underlying rect."""
@@ -2248,6 +2254,8 @@ FLAP_STRENGTH = 6.5
 SPEED = 3
 
 bird = Actor('bird1', (75, 200))
+
+
 bird.dead = False
 bird.score = 0
 bird.vy = 0
@@ -2289,7 +2297,7 @@ def update_bird():
         else:
             bird.image = 'bird1'
 
-    if bird.colliderect(pipe_top) or bird.colliderect(pipe_bottom):
+    if bird.colliderect(pipe_top): #or bird.colliderect(pipe_bottom):
         bird.dead = True
         bird.image = 'birddead'
 
@@ -2316,20 +2324,20 @@ def draw():
     pipe_top.draw()
     pipe_bottom.draw()
     bird.draw()
-    screen.draw.text(
-        str(bird.score),
-        color='white',
-        midtop=(WIDTH // 2, 10),
-        fontsize=70,
-        shadow=(1, 1)
-    )
-    screen.draw.text(
-        "Best: {}".format(storage['highscore']),
-        color=(200, 170, 0),
-        midbottom=(WIDTH // 2, HEIGHT - 10),
-        fontsize=30,
-        shadow=(1, 1)
-    )
+    # screen.draw.text(
+    #     str(bird.score),
+    #     color='white',
+    #     midtop=(WIDTH // 2, 10),
+    #     fontsize=70,
+    #     shadow=(1, 1)
+    # )
+    # screen.draw.text(
+    #     "Best: {}".format(storage['highscore']),
+    #     color=(200, 170, 0),
+    #     midbottom=(WIDTH // 2, HEIGHT - 10),
+    #     fontsize=30,
+    #     shadow=(1, 1)
+    # )
 
 
 # ========================================== MAIN LOOP ==================================================================

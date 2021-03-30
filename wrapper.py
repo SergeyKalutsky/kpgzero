@@ -4,7 +4,7 @@ import pygame
 import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
-PLATFORM = False
+PLATFORM = True
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -502,7 +502,7 @@ def _resolvecolor(color, default):
     if color is None:
         return None
     try:
-        return tuple(pygame.Color(color))
+        return tuple(make_color(color))
     except ValueError:
         return tuple(color)
 
@@ -678,7 +678,7 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
                 x = int(round(align * (w - lsurf.get_width())))
                 surf.blit(lsurf, (x, y))
     if cache:
-        w, h = surf.get_size()
+        w, h = list(map(int, surf.get_size()))
         _surf_size_total += 4 * w * h
         _surf_cache[key] = surf
         _surf_tick_usage[key] = _tick
@@ -2244,7 +2244,7 @@ each_tick = clock.each_tick
 # the ball to the other.
 import random
 
-WIDTH = 800
+WIDTH = 500
 HEIGHT = 600
 TITLE = 'pong'
 
@@ -2271,18 +2271,22 @@ class Paddle(Rect):
     """
 
     def __init__(self, start_x, start_y):
-        super().__init__(start_x, start_y, PADDLE_WIDTH, PADDLE_HEIGHT)
+        self.r = Rect(start_x, start_y, PADDLE_WIDTH, PADDLE_HEIGHT)
+        self.y = self.r.y
+        self.height = self.r.height
+        self.width = self.r.width
+        self.x = self.r.x
 
     def up(self):
-        if self.y - 5 > 40:
-            self.y -= 5
+        if self.r.y - 5 > 40:
+            self.r.y -= 5
 
     def down(self):
-        if self.y + self.height + 5 < HEIGHT - 40:
-            self.y += 5
+        if self.r.y + self.r.height + 5 < HEIGHT - 40:
+            self.r.y += 5
 
     def draw(self):
-        screen.draw.filled_rect(self, MAIN_COLOR)
+        screen.draw.filled_rect(self.r, MAIN_COLOR)
 
 
 class TennisBall():
@@ -2329,9 +2333,9 @@ class Game():
     @property
     def ball_pos(self):
         if self.active_player == LEFT_PLAYER:
-            return (20 + PADDLE_WIDTH + 10, self.left_paddle.centery)
+            return (20 + PADDLE_WIDTH + 10, self.left_paddle.r.centery)
         else:
-            return (WIDTH - 35 - PADDLE_WIDTH, self.right_paddle.centery)
+            return (WIDTH - 35 - PADDLE_WIDTH, self.right_paddle.r.centery)
 
     def set_ball(self, pos):
         # a ball is set on the paddle of last player that got a point
@@ -2366,10 +2370,10 @@ class Game():
             self.tennis_ball.dy = -self.tennis_ball.dy
 
         # bounce from the paddles
-        if self.left_paddle.collidepoint(self.tennis_ball.pos):
+        if self.left_paddle.r.collidepoint(self.tennis_ball.pos):
             self.tennis_ball.dx = -self.tennis_ball.dx
 
-        if self.right_paddle.collidepoint(self.tennis_ball.pos):
+        if self.right_paddle.r.collidepoint(self.tennis_ball.pos):
             self.tennis_ball.dx = -self.tennis_ball.dx
 
         # if we didn't bounce, then that is a score
@@ -2414,16 +2418,16 @@ class Game():
 
         target_y = max(40, min(target_y, HEIGHT - 80))
 
-        distance = abs(self.left_paddle.y - target_y)
+        distance = abs(self.left_paddle.r.y - target_y)
         duration = min(1.0, distance / 600.0)
 
-        animate(self.left_paddle, y=target_y, duration=.50,
+        animate(self.left_paddle.r, y=target_y, duration=.50,
             on_finished=self.computer_stop_acting)
 
     def computer_move_randomly(self):
         # move the paddle randomly during one second before launching the ball
         target_y = random.randint(40, HEIGHT - PADDLE_HEIGHT - 80)
-        distance = abs(self.left_paddle.y - target_y)
+        distance = abs(self.left_paddle.r.y - target_y)
         duration = max(0.1, distance / 200.0)
         self.computer_total_duration += duration
 
@@ -2432,7 +2436,7 @@ class Game():
         else:
             on_finished = self.computer_launch
 
-        animate(self.left_paddle, y=target_y, duration=duration,
+        animate(self.left_paddle.r, y=target_y, duration=duration,
             on_finished=on_finished)
 
     def computer_act(self):

@@ -605,9 +605,9 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
                         ocolor, owidth, scolor, shadow, gcolor=gcolor, align=align,
                         lineheight=lineheight, cache=cache)
         surf = surf0.copy()
-        array = pygame.surfarray.pixels_alpha(surf)
-        array[:, :] = (array[:, :] * alpha).astype(array.dtype)
-        del array
+        # array = pygame.surfarray.pixels_alpha(surf)
+        # array[:, :] = (array[:, :] * alpha).astype(array.dtype)
+        # del array
     elif spx is not None:
         surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
                         width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
@@ -622,14 +622,14 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
         dx, dy = max(sx, 0), max(sy, 0)
         surf.blit(ssurf, (dx, dy))
         x0, y0 = abs(sx) - dx, abs(sy) - dy
-        if len(color) > 3 and color[3] == 0:
-            array = pygame.surfarray.pixels_alpha(surf)
-            array0 = pygame.surfarray.pixels_alpha(surf0)
-            array[x0:x0 + w0, y0:y0 +
-                  h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
-            del array, array0
-        else:
-            surf.blit(surf0, (x0, y0))
+        # if len(color) > 3 and color[3] == 0:
+        #     array = pygame.surfarray.pixels_alpha(surf)
+        #     array0 = pygame.surfarray.pixels_alpha(surf0)
+        #     array[x0:x0 + w0, y0:y0 +
+        #           h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
+        #     del array, array0
+        # else:
+        surf.blit(surf0, (x0, y0))
     elif opx is not None:
         surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
                         width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
@@ -654,16 +654,16 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
         else:
             lsurfs = [font.render(text, antialias, color,
                                   background).convert_alpha() for text in texts]
-        if gcolor is not None:
-            import numpy
-            for lsurf in lsurfs:
-                m = numpy.clip(numpy.arange(
-                    lsurf.get_height()) * 2.0 / font.get_ascent() - 1.0, 0, 1)
-                array = pygame.surfarray.pixels3d(lsurf)
-                for j in (0, 1, 2):
-                    array[:, :, j] = (
-                        (1.0 - m) * array[:, :, j] + m * gcolor[j]).astype(array.dtype)
-                del array
+        # if gcolor is not None:
+        #     import numpy
+        #     for lsurf in lsurfs:
+        #         m = numpy.clip(numpy.arange(
+        #             lsurf.get_height()) * 2.0 / font.get_ascent() - 1.0, 0, 1)
+        #         array = pygame.surfarray.pixels3d(lsurf)
+        #         for j in (0, 1, 2):
+        #             array[:, :, j] = (
+        #                 (1.0 - m) * array[:, :, j] + m * gcolor[j]).astype(array.dtype)
+        #         del array
 
         if len(lsurfs) == 1 and gcolor is None:
             surf = lsurfs[0]
@@ -963,11 +963,18 @@ COLORS = {
     'blue': (0, 0, 255)
 }
 
+def convert_hex_color(hex_color):
+    h = hex_color.lstrip('#')
+    rgb_color = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    return rgb_color
+
 def make_color(arg):
     if isinstance(arg, tuple):
         return arg
     if arg.lower() in COLORS:
         return COLORS[arg.lower()]
+    elif arg.lower()[0] == '#':
+        return convert_hex_color(arg.lower())
     else:
         raise AttributeError('The color "%s" does not exist' % arg.lower())
 
@@ -2228,111 +2235,159 @@ unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ==============================================================
   
-import math
+WIDTH = sx = 854
+HEIGHT = sy = 480
+TITLE = "Clooky Clunker"
 
-WIDTH = 400
-HEIGHT = 800
+score, totalscore, clunkers = 0, 0, 0
+nextgoal = 0
+tgoal = -100
+clunks = []
+tbuy, buytext = -100, ""
+t = 0
 
-# How many wobbles the ship does while diving
-DIVE_WOBBLE_SPEED = 2
-
-# How far the ship wobbles while diving
-DIVE_WOBBLE_AMOUNT = 100
-
-
-def dive_path(t):
-    """Get the ship's position at time t when diving.
-    This is relative to the ship's original position (so, at t=0, dive_path(t)
-    returns (0, 0)). Here we flip to the right before diving.
-    """
-    if t < 0.5:
-        # During the first 0.5s, do a half-loop to the right
-        return (
-            50 * (1 - math.cos(2 * t * math.pi)),
-            -50 * (math.sin(2 * t * math.pi))
-        )
-
-    # For the rest of the time, follow a sinusoidal path downwards
-    t -= 0.5
-    return (
-        DIVE_WOBBLE_AMOUNT * math.cos(t * DIVE_WOBBLE_SPEED),
-        t * 350,
-    )
+buttonrects = [Rect((50, 120 + 85 * j, 180, 70)) for j in range(4)]
+buttonnames = ["auto-clunker", "clunkutron",
+               "turbo enclunkulator", "clunx capacitor"]
+buttoncosts = [10, 400, 12000, 250000]
 
 
-def make_individual_dive(start_pos, flip_x=False):
-    """Return a function that will return a dive path from start_pos.
-    If flip_x is True then the path will be flipped in the x direction.
-    """
-    dir = -1 if flip_x else 1
-    sx, sy = start_pos
-
-    def _dive_path(t):
-        x, y = dive_path(t)
-        return sx + x * dir, sy + y
-
-    return _dive_path
+def on_key_down(key):
+    if key == keys.ESCAPE:
+        exit()
 
 
-def ship_controller_pan(ship, dt):
-    """Update the ship when the ship is panning."""
-    ship.x += ship.vx * dt
-    if ship.right > WIDTH - 50:
-        ship.vx = -ship.vx
-        ship.right = WIDTH - 50
-    elif ship.left < 50:
-        ship.vx = -ship.vx
-        ship.left = 50
+def on_mouse_down(button, pos):
+    global score, totalscore, clunkers, tbuy, buytext
+    if button != 1:
+        return
 
+    x, y = pos
+    # Click on the central circle
+    if (x - sx / 2) ** 2 + (y - sy / 2) ** 2 < 100 ** 2:
+        score += 1
+        totalscore += 1
+        # Add a "clunk" indicator at a pseudorandom place near the center
+        ix = sx / 2 + 12345678910. / (1 + t) % 1 * 200 - 100
+        iy = sy / 2 + 45678910123. / (1 + t) % 1 * 200 - 100
+        clunks.append((t, ix, iy))
 
-def ship_controller_dive(ship, dt):
-    """Update the ship when the ship is diving."""
-    # Move the ship along the path
-    ship.t += dt
-    ship.pos = ship.dive_path(ship.t)
-
-    # Look ahead along the path to see what direction the ship
-    # is moving, and set the ship's rotation accordingly
-    ship.angle = ship.angle_to(ship.dive_path(ship.t + EPSILON))
-
-    # If we've reached the bottom of the screen, resume dive mode
-    if ship.top > HEIGHT:
-        ship.controller_function = ship_controller_pan
-        ship.pos = ship.dive_path(0)
-        ship.angle = 90
-        clock.schedule(start_dive, 3)
-
-
-EPSILON = 0.001
-
-# Create an Actor using the 'ship' sprite
-ship = Actor('ship', pos=(100, 100))
-ship.angle = 90  # Face upwards
-ship.controller_function = ship_controller_pan
-ship.vx = 100
-
-
-def draw():
-    """Just draw the actor on the screen."""
-    screen.clear()
-    ship.draw()
+    # Click on one of the buttons
+    for j in range(len(buttonrects)):
+        rect, cost = buttonrects[j], buttoncosts[j]
+        if rect.collidepoint(x, y) and score >= cost:
+            score -= cost
+            clunkers += 10 ** j
+            tbuy = t
+            buytext = "+%s clunk/s" % (10 ** j)
+            buttoncosts[j] += int(round(cost * 0.2))
 
 
 def update(dt):
-    """Update the ship using its current controller function."""
-    ship.controller_function(ship, dt)
+    global t
+    global score, totalscore, goaltext, tgoal, nextgoal
+    t += dt
+    score += clunkers * dt
+    totalscore += clunkers * dt
+
+    # Check for next achievement
+    if totalscore > 100 * (1 << nextgoal):
+        goaltext = "Achievement unlocked:\nCL%sKY!" % ("O" * (nextgoal + 2))
+        tgoal = t
+        nextgoal += 1
+
+    clunks[:] = [c for c in clunks if t - c[0] < 1]
 
 
-def start_dive():
-    """Make the ship start a dive."""
-    # flip the dive if we're on the left of the screen
-    flip_x = ship.x < WIDTH // 2
-    ship.controller_function = ship_controller_dive
-    ship.dive_path = make_individual_dive(ship.pos, flip_x=flip_x)
-    ship.t = 0
+def draw():
+    screen.fill((0, 30, 30))
 
+    # Draw the circle in the middle
+    screen.draw.filled_circle((sx // 2, sy // 2), 106, 'black')
+    screen.draw.filled_circle((sx // 2, sy // 2), 100, '#884400')
 
-clock.schedule(start_dive, 3)
+    # Draw the buttons using screen.draw.textbox
+    for rect, name, cost in zip(buttonrects, buttonnames, buttoncosts):
+        screen.draw.filled_rect(rect, "#553300")
+        screen.draw.filled_rect(rect.inflate(-8, -8), "#332200")
+        text = u"%s: %d\u00A0clunks" % (name, cost)
+        color = "white" if cost <= score else "#666666"
+        box = rect.inflate(-16, -16)
+        screen.draw.textbox(
+            text, box,
+            lineheight=0.9,
+            color=color,
+            owidth=0.5
+        )
+
+    # Draw the HUD
+    hudtext = "\n".join([
+        "time played: %d" % t,
+        "clunks: %d" % score,
+        "all-time clunks: %d" % totalscore,
+        "clunks per second: %d" % clunkers,
+    ])
+    screen.draw.text(hudtext,
+        right=sx - 10,
+        top=120,
+        fontsize=32,
+        color=(0, 200, 0),
+        scolor=(0, 50, 0),
+        shadow=(-1, 1),
+        lineheight=1.3
+    )
+
+    # Draw the title using a gradient
+    screen.draw.text(
+        "Clooky Clunker",
+        midtop=(sx / 2, 10),
+        fontsize=64,
+        owidth=1.2,
+        color="#884400",
+        gcolor="#442200"
+    )
+
+    # Draw "clunk" indicators
+    for it, ix, iy in clunks:
+        dt = t - it
+        pos = ix, iy - 60 * dt
+        screen.draw.text(
+            "clunk",
+            center=pos,
+            fontname=None,
+            fontsize=28,
+            alpha=1 - dt,
+            shadow=(1, 1)
+        )
+
+    # Draw purchase indicator
+    if t - tbuy < 1:
+        dt = t - tbuy
+        pos = sx / 2, sy / 2
+        fontsize = 32 * (1 + 60 * dt) ** 0.2
+        screen.draw.text(
+            buytext, pos,
+            anchor=(0.5, 0.9),
+            fontsize=fontsize,
+            alpha=1 - dt,
+            shadow=(1, 1)
+        )
+
+    # Draw achievement unlocked text (text is centered even though we specify
+    # bottom right).
+    if t - tgoal < 2:
+        alpha = min(2 - (t - tgoal), 1)
+        screen.draw.text(
+            goaltext,
+            fontsize=48,
+            bottom=sy - 20,
+            right=sx - 40,
+            color="#AAAAFF",
+            gcolor="#4444AA",
+            shadow=(1.5, 1.5),
+            alpha=alpha,
+            align="center"
+        )
 # ========================================== MAIN LOOP ==================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

@@ -165,7 +165,7 @@ DEFAULT_FONT_SIZE = 24
 REFERENCE_FONT_SIZE = 100
 DEFAULT_LINE_HEIGHT = 1.0
 DEFAULT_FONT_NAME = None
-FONT_NAME_TEMPLATE = "%s"
+FONT_NAME_TEMPLATE = "%s.ttf "
 DEFAULT_COLOR = "white"
 DEFAULT_BACKGROUND = None
 DEFAULT_OUTLINE_COLOR = "black"
@@ -461,39 +461,6 @@ def wrap(text, fontname=None, fontsize=None, sysfontname=None,
             lines.append(line)
     return lines
 
-_fit_cache = {}
-
-
-def _fitsize(text, fontname, sysfontname, bold, italic, underline, width, height, lineheight, strip):
-    key = text, fontname, sysfontname, bold, italic, underline, width, height, lineheight, strip
-    if key in _fit_cache:
-        return _fit_cache[key]
-
-    def fits(fontsize):
-        texts = wrap(text, fontname, fontsize, sysfontname,
-                     bold, italic, underline, width, strip)
-        font = getfont(fontname, fontsize, sysfontname,
-                       bold, italic, underline)
-        w = max(font.size(line)[0] for line in texts)
-        linesize = font.get_linesize() * lineheight
-        h = int(round((len(texts) - 1) * linesize)) + font.get_height()
-        return w <= width and h <= height
-    a, b = 1, 256
-    if not fits(a):
-        fontsize = a
-    elif fits(b):
-        fontsize = b
-    else:
-        while b - a > 1:
-            c = (a + b) // 2
-            if fits(c):
-                a = c
-            else:
-                b = c
-        fontsize = a
-    _fit_cache[key] = fontsize
-    return fontsize
-
 
 def _resolvecolor(color, default):
     if color is None:
@@ -604,9 +571,9 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
                         ocolor, owidth, scolor, shadow, gcolor=gcolor, align=align,
                         lineheight=lineheight, cache=cache)
         surf = surf0.copy()
-        array = pygame.surfarray.pixels_alpha(surf)
-        array[:, :] = (array[:, :] * alpha).astype(array.dtype)
-        del array
+        # array = pygame.surfarray.pixels_alpha(surf)
+        # array[:, :] = (array[:, :] * alpha).astype(array.dtype)
+        # del array
     elif spx is not None:
         surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
                         width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
@@ -670,18 +637,17 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
         #             array[:, :, j] = (
         #                 (1.0 - m) * array[:, :, j] + m * gcolor[j]).astype(array.dtype)
         #         del array
-
+        
         if len(lsurfs) == 1 and gcolor is None:
             surf = lsurfs[0]
         else:
-            w = max(lsurf.get_width() for lsurf in lsurfs)
-            linesize = font.get_linesize() * lineheight
-            ys = [int(round(k * linesize)) for k in range(len(lsurfs))]
-            h = ys[-1] + font.get_height()
+            w = max(lsurf.get_bounding_rect().width for lsurf in lsurfs)
+            ys = [int(round(k * lsurfs[k].get_bounding_rect().height)) for k in range(len(lsurfs))]
+            h = ys[-1] + lsurfs[-1].get_bounding_rect().height
             surf = pygame.Surface((w, h)).convert_alpha()
             surf.fill(background or (0, 0, 0, 0))
             for y, lsurf in zip(ys, lsurfs):
-                x = int(round(align * (w - lsurf.get_width())))
+                x = int(round(align * (w - lsurf.get_bounding_rect().width)))
                 surf.blit(lsurf, (x, y))
     if cache:
         w, h = list(map(int, surf.get_size()))
@@ -785,21 +751,6 @@ class Ptext:
 
         return tsurf, (x, y)
 
-    def drawbox(self, text, rect, fontname=None, sysfontname=None, lineheight=None, anchor=None,
-                bold=None, italic=None, underline=None, strip=None, **kwargs):
-        if fontname is None:
-            fontname = DEFAULT_FONT_NAME
-        if lineheight is None:
-            lineheight = DEFAULT_LINE_HEIGHT
-        hanchor, vanchor = anchor = anchor or (0.5, 0.5)
-        rect = pygame.Rect(rect)
-        x = rect.x + hanchor * rect.width
-        y = rect.y + vanchor * rect.height
-        fontsize = _fitsize(text, fontname, sysfontname, bold, italic, underline,
-                            rect.width, rect.height, lineheight, strip)
-        return self.draw(text, (x, y), fontname=fontname, fontsize=fontsize, lineheight=lineheight,
-                    width=rect.width, strip=strip, anchor=anchor, **kwargs)
-
 ptext = Ptext()
 
 def clean():
@@ -810,7 +761,7 @@ def clean():
     memory_limit *= MEMORY_REDUCTION_FACTOR
     keys = sorted(_surf_cache, key=_surf_tick_usage.get)
     for key in keys:
-        w, h = _surf_cache[key].get_size()
+        w, h = list(map(int,_surf_cache[key].get_size()))
         del _surf_cache[key]
         del _surf_tick_usage[key]
         _surf_size_total -= 4 * w * h
@@ -1046,11 +997,6 @@ class SurfacePainter:
         # FIXME: expose ptext parameters, for autocompletion and autodoc
         ptext.draw(*args, surf=self._surf, **kwargs)
 
-    def textbox(self, *args, **kwargs):
-        """Draw text to the screen, wrapped to fit a box"""
-        # FIXME: expose ptext parameters, for autocompletion and autodoc
-        ptext.drawbox(*args, surf=self._surf, **kwargs)
-    
     def set_at(self, rect_points, color):
         # Метод set_at на платформе сломан
         rect = Rect(rect_points[0], rect_points[1], 1, 1)
@@ -2244,102 +2190,155 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ===================================================================
-import random
 
+WIDTH = sx = 854
+HEIGHT = sy = 480
+TITLE = "Clooky Clunker"
 
-TITLE = 'Flappy Bird'
-WIDTH = 400
-HEIGHT = 708
+score, totalscore, clunkers = 0, 0, 0
+nextgoal = 0
+tgoal = -100
+clunks = []
+tbuy, buytext = -100, ""
+t = 0
 
-# These constants control the difficulty of the game
-GAP = 130
-GRAVITY = 0.3
-FLAP_STRENGTH = 6.5
-SPEED = 3
-
-bird = Actor('bird1', (75, 200))
-bird.dead = False
-bird.score = 0
-bird.vy = 0
-storage = {}
-storage['highscore'] = 0
-
-
-def reset_pipes():
-    pipe_gap_y = random.randint(200, HEIGHT - 200)
-    pipe_top.pos = (WIDTH, pipe_gap_y - GAP // 2)
-    pipe_bottom.pos = (WIDTH, pipe_gap_y + GAP // 2)
-
-
-pipe_top = Actor('top', anchor=('left', 'bottom'))
-pipe_bottom = Actor('bottom', anchor=('left', 'top'))
-reset_pipes()  # Set initial pipe positions.
-
-
-def update_pipes():
-    pipe_top.left -= SPEED
-    pipe_bottom.left -= SPEED
-    if pipe_top.right < 0:
-        reset_pipes()
-        if not bird.dead:
-            bird.score += 1
-            if bird.score > storage['highscore']:
-                storage['highscore'] = bird.score
-
-
-def update_bird():
-    uy = bird.vy
-    bird.vy += GRAVITY
-    bird.y += (uy + bird.vy) / 2
-    bird.x = 75
-
-    if not bird.dead:
-        if bird.vy < -3:
-            bird.image = 'bird2'
-        else:
-            bird.image = 'bird1'
-
-    if bird.colliderect(pipe_top) or bird.colliderect(pipe_bottom):
-        bird.dead = True
-        bird.image = 'birddead'
-
-    if not 0 < bird.y < 720:
-        bird.y = 200
-        bird.dead = False
-        bird.score = 0
-        bird.vy = 0
-        reset_pipes()
-
-
-def update(dt):
-    update_pipes()
-    update_bird()
+buttonrects = [Rect(*(50, 120 + 85 * j, 180, 70)) for j in range(4)]
+buttonnames = ["auto-clunker", "clunkutron",
+               "turbo enclunkulator", "clunx capacitor"]
+buttoncosts = [10, 400, 12000, 250000]
 
 
 def on_key_down(key):
-    if not bird.dead:
-        bird.vy = -FLAP_STRENGTH
+    if key == keys.ESCAPE:
+        exit()
+
+
+def on_mouse_down(button, pos):
+    global score, totalscore, clunkers, tbuy, buytext
+    if button != 1:
+        return
+
+    x, y = pos
+    # Click on the central circle
+    if (x - sx / 2) ** 2 + (y - sy / 2) ** 2 < 100 ** 2:
+        score += 1
+        totalscore += 1
+        # Add a "clunk" indicator at a pseudorandom place near the center
+        ix = sx / 2 + 12345678910. / (1 + t) % 1 * 200 - 100
+        iy = sy / 2 + 45678910123. / (1 + t) % 1 * 200 - 100
+        clunks.append((t, ix, iy))
+
+    # Click on one of the buttons
+    for j in range(len(buttonrects)):
+        rect, cost = buttonrects[j], buttoncosts[j]
+        if rect.collidepoint(x, y) and score >= cost:
+            score -= cost
+            clunkers += 10 ** j
+            tbuy = t
+            buytext = "+%s clunk/s" % (10 ** j)
+            buttoncosts[j] += int(round(cost * 0.2))
+
+
+def update(dt):
+    global t
+    global score, totalscore, goaltext, tgoal, nextgoal
+    t += dt
+    score += clunkers * dt
+    totalscore += clunkers * dt
+
+    # Check for next achievement
+    if totalscore > 100 * (1 << nextgoal):
+        goaltext = "Achievement unlocked:\nCL%sKY!" % ("O" * (nextgoal + 2))
+        tgoal = t
+        nextgoal += 1
+
+    clunks[:] = [c for c in clunks if t - c[0] < 1]
 
 
 def draw():
-    screen.blit('background', (0, 0))
-    pipe_top.draw()
-    pipe_bottom.draw()
-    bird.draw()
-    screen.draw.text(
-        str(bird.score),
-        color='white',
-        midtop=(WIDTH // 2, 10),
-        fontsize=70,
-        shadow=(1, 1)
+    screen.fill((0, 30, 30))
+
+    # Draw the circle in the middle
+    screen.draw.filled_circle((sx // 2, sy // 2), 106, 'black')
+    screen.draw.filled_circle((sx // 2, sy // 2), 100, '#884400')
+
+    # Draw the buttons using screen.draw.textbox
+    for rect, name, cost in zip(buttonrects, buttonnames, buttoncosts):
+        screen.draw.filled_rect(rect, "#553300")
+        screen.draw.filled_rect(rect.inflate(-8, -8), "#332200")
+
+    # Draw the HUD
+    hudtext = "\n".join([
+        "time played: %d" % t,
+        "clunks: %d" % score,
+        "all-time clunks: %d" % totalscore,
+        "clunks per second: %d" % clunkers,
+    ])
+    screen.draw.text(hudtext,
+        right=sx - 10,
+        top=120,
+        fontname="roboto_condensed",
+        fontsize=32,
+        color=(0, 200, 0),
+        scolor=(0, 50, 0),
+        shadow=(-1, 1),
+        lineheight=1.3
     )
+
+    # Draw the title using a gradient
     screen.draw.text(
-        "Best: {}".format(storage['highscore']),
-        color=(200, 170, 0),
-        midbottom=(WIDTH // 2, HEIGHT - 10),
-        fontsize=30,
-        shadow=(1, 1)
+        "Clooky Clunker",
+        midtop=(sx / 2, 10),
+        fontname="cherrycreamsoda",
+        fontsize=64,
+        owidth=1.2,
+        color="#884400",
+        gcolor="#442200"
     )
+
+    # Draw "clunk" indicators
+    for it, ix, iy in clunks:
+        dt = t - it
+        pos = ix, iy - 60 * dt
+        screen.draw.text(
+            "clunk",
+            center=pos,
+            fontname=None,
+            fontsize=28,
+            alpha=1 - dt,
+            shadow=(1, 1)
+        )
+
+    # Draw purchase indicator
+    if t - tbuy < 1:
+        dt = t - tbuy
+        pos = sx / 2, sy / 2
+        fontsize = 32 * (1 + 60 * dt) ** 0.2
+        screen.draw.text(
+            buytext, pos,
+            anchor=(0.5, 0.9),
+            fontname="bubblegum_sans",
+            fontsize=fontsize,
+            alpha=1 - dt,
+            shadow=(1, 1)
+        )
+
+    # Draw achievement unlocked text (text is centered even though we specify
+    # bottom right).
+    if t - tgoal < 2:
+        alpha = min(2 - (t - tgoal), 1)
+        screen.draw.text(
+            goaltext,
+            fontname="boogaloo",
+            fontsize=48,
+            bottom=sy - 20,
+            right=sx - 40,
+            color="#AAAAFF",
+            gcolor="#4444AA",
+            shadow=(1.5, 1.5),
+            alpha=alpha,
+            align="center"
+        )
 
 # ========================================== MAIN LOOP ========================================================================
 

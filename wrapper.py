@@ -4,7 +4,7 @@ import pygame
 import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
-PLATFORM = True
+PLATFORM = False
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -397,71 +397,6 @@ def getfont(fontname=None, fontsize=None, sysfontname=None,
     return font
 
 
-def wrap(text, fontname=None, fontsize=None, sysfontname=None,
-         bold=None, italic=None, underline=None, width=None, widthem=None, strip=None):
-    if widthem is None:
-        font = getfont(fontname, fontsize, sysfontname,
-                       bold, italic, underline)
-    elif width is not None:
-        raise ValueError("Can't set both width and widthem")
-    else:
-        font = getfont(fontname, REFERENCE_FONT_SIZE,
-                       sysfontname, bold, italic, underline)
-        width = widthem * REFERENCE_FONT_SIZE
-    if strip is None:
-        strip = DEFAULT_STRIP
-    texts = text.replace("\t", "    ").split("\n")
-    lines = []
-    for text in texts:
-        if strip:
-            text = text.rstrip(" ")
-        if width is None:
-            lines.append(text)
-            continue
-        if not text:
-            lines.append("")
-            continue
-        # Preserve leading spaces in all cases.
-        a = len(text) - len(text.lstrip(" "))
-        # At any time, a is the rightmost known index you can legally split a line. I.e. it's legal
-        # to add text[:a] to lines, and line is what will be added to lines if
-        # text is split at a.
-        a = text.index(" ", a) if " " in text else len(text)
-        line = text[:a]
-        while a + 1 < len(text):
-            # b is the next legal place to break the line, with bline the
-            # corresponding line to add.
-            if " " not in text[a + 1:]:
-                b = len(text)
-                bline = text
-            elif strip:
-                # Lines may be split at any space character that immediately follows a non-space
-                # character.
-                b = text.index(" ", a + 1)
-                while text[b - 1] == " ":
-                    if " " in text[b + 1:]:
-                        b = text.index(" ", b + 1)
-                    else:
-                        b = len(text)
-                        break
-                bline = text[:b]
-            else:
-                # Lines may be split at any space character, or any character immediately following
-                # a space character.
-                b = a + 1 if text[a] == " " else text.index(" ", a + 1)
-            bline = text[:b]
-            if font.size(bline)[0] <= width:
-                a, line = b, bline
-            else:
-                lines.append(line)
-                text = text[a:].lstrip(" ") if strip else text[a:]
-                a = text.index(" ", 1) if " " in text[1:] else len(text)
-                line = text[:a]
-        if text:
-            lines.append(line)
-    return lines
-
-
 def _resolvecolor(color, default):
     if color is None:
         color = default
@@ -473,192 +408,9 @@ def _resolvecolor(color, default):
         return tuple(color)
 
 
-def _resolvealpha(alpha):
-    if alpha >= 1:
-        return 1
-    return max(int(round(alpha * ALPHA_RESOLUTION)) / ALPHA_RESOLUTION, 0)
-
-
-def _resolveangle(angle):
-    if not angle:
-        return 0
-    angle %= 360
-    return int(round(angle / ANGLE_RESOLUTION_DEGREES)) * ANGLE_RESOLUTION_DEGREES
-
-
-# Return the set of points in the circle radius r, using Bresenham's
-# circle algorithm
-_circle_cache = {}
-
-
-def _circlepoints(r):
-    r = int(round(r))
-    if r in _circle_cache:
-        return _circle_cache[r]
-    x, y, e = r, 0, 1 - r
-    _circle_cache[r] = points = []
-    while x >= y:
-        points.append((x, y))
-        y += 1
-        if e < 0:
-            e += 2 * y - 1
-        else:
-            x -= 1
-            e += 2 * (y - x) - 1
-    points += [(y, x) for x, y in points if x > y]
-    points += [(-x, y) for x, y in points if x]
-    points += [(x, -y) for x, y in points if y]
-    points.sort()
-    return points
-
-
-_surf_cache = {}
-_surf_tick_usage = {}
-_surf_size_total = 0
 _unrotated_size = {}
 _tick = 0
 
-
-def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, italic=None,
-            underline=None, width=None, widthem=None, strip=None, color=None,
-            background=None, antialias=True, ocolor=None, owidth=None, scolor=None, shadow=None,
-            gcolor=None, alpha=1.0, align=None, lineheight=None, angle=0, cache=True):
-    global _tick, _surf_size_total
-    if fontname is None:
-        fontname = DEFAULT_FONT_NAME
-    if fontsize is None:
-        fontsize = DEFAULT_FONT_SIZE
-    fontsize = int(round(fontsize))
-    if align is None:
-        align = DEFAULT_ALIGN
-    if align in ["left", "center", "right"]:
-        align = [0, 0.5, 1][["left", "center", "right"].index(align)]
-    if lineheight is None:
-        lineheight = DEFAULT_LINE_HEIGHT
-    color = _resolvecolor(color, DEFAULT_COLOR)
-    background = _resolvecolor(background, DEFAULT_BACKGROUND)
-    gcolor = _resolvecolor(gcolor, None)
-    ocolor = None if owidth is None else _resolvecolor(
-        ocolor, DEFAULT_OUTLINE_COLOR)
-    scolor = None if shadow is None else _resolvecolor(
-        scolor, DEFAULT_SHADOW_COLOR)
-    opx = None if owidth is None else ceil(owidth * fontsize * OUTLINE_UNIT)
-    spx = None if shadow is None else tuple(
-        ceil(s * fontsize * SHADOW_UNIT) for s in shadow)
-    alpha = _resolvealpha(alpha)
-    angle = _resolveangle(angle)
-    strip = DEFAULT_STRIP if strip is None else strip
-    key = (text, fontname, fontsize, sysfontname, bold, italic, underline, width, widthem, strip,
-           color, background, antialias, ocolor, opx, scolor, spx, gcolor, alpha, align, lineheight, angle)
-    if key in _surf_cache:
-        _surf_tick_usage[key] = _tick
-        _tick += 1
-        return _surf_cache[key]
-    texts = wrap(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                 width=width, widthem=widthem, strip=strip)
-    if angle:
-        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color, background, antialias,
-                        ocolor, owidth, scolor, shadow, gcolor, alpha, align, lineheight, cache=cache)
-        if angle in (90, 180, 270):
-            surf = pygame.transform.rotate(surf0, angle)
-        else:
-            surf = pygame.transform.rotozoom(surf0, angle, 1.0)
-        _unrotated_size[(surf.get_size(), angle, text)] = surf0.get_size()
-    elif alpha < 1.0:
-        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color, background, antialias,
-                        ocolor, owidth, scolor, shadow, gcolor=gcolor, align=align,
-                        lineheight=lineheight, cache=cache)
-        surf = surf0.copy()
-        # array = pygame.surfarray.pixels_alpha(surf)
-        # array[:, :] = (array[:, :] * alpha).astype(array.dtype)
-        # del array
-    elif spx is not None:
-        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
-                        gcolor=gcolor, align=align, lineheight=lineheight, cache=cache)
-        ssurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color=scolor, background=(0, 0, 0, 0), antialias=antialias,
-                        align=align, lineheight=lineheight, cache=cache)
-        w0, h0 = surf0.get_size()
-        sx, sy = spx
-        surf = pygame.Surface((w0 + abs(sx), h0 + abs(sy))).convert_alpha()
-        surf.fill(background or (0, 0, 0, 0))
-        dx, dy = max(sx, 0), max(sy, 0)
-        surf.blit(ssurf, (dx, dy))
-        x0, y0 = abs(sx) - dx, abs(sy) - dy
-        if len(color) > 3 and color[3] == 0:
-            array = pygame.surfarray.pixels_alpha(surf)
-            array0 = pygame.surfarray.pixels_alpha(surf0)
-            array[x0:x0 + w0, y0:y0 +
-                  h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
-            del array, array0
-        else:
-            surf.blit(surf0, (x0, y0))
-    elif opx is not None:
-        surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
-                        gcolor=gcolor, align=align, lineheight=lineheight, cache=cache)
-        osurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
-                        width, widthem, strip, color=ocolor, background=(0, 0, 0, 0), antialias=antialias,
-                        align=align, lineheight=lineheight, cache=cache)
-        w0, h0 = surf0.get_size()
-        surf = pygame.Surface((w0 + 2 * opx, h0 + 2 * opx)).convert_alpha()
-        surf.fill(background or (0, 0, 0, 0))
-        for dx, dy in _circlepoints(opx):
-            surf.blit(osurf, (dx + opx, dy + opx))
-        if len(color) > 3 and color[3] == 0:
-            array = pygame.surfarray.pixels_alpha(surf)
-            array0 = pygame.surfarray.pixels_alpha(surf0)
-            array[opx:-opx, opx:-
-                  opx] -= array0.clip(max=array[opx:-opx, opx:-opx])
-            del array, array0
-        else:
-            surf.blit(surf0, (opx, opx))
-    else:
-        font = getfont(fontname, fontsize, sysfontname,
-                       bold, italic, underline)
-        # pygame.Font.render does not allow passing None as an argument value
-        # for background.
-        if background is None or (len(background) > 3 and background[3] == 0) or gcolor is not None:
-            lsurfs = [font.render(text, antialias, color).convert_alpha()
-                      for text in texts]
-        else:
-            lsurfs = [font.render(text, antialias, color,
-                                  background).convert_alpha() for text in texts]
-        # if gcolor is not None:
-        #     import numpy
-        #     for lsurf in lsurfs:
-        #         m = numpy.clip(numpy.arange(
-        #             lsurf.get_height()) * 2.0 / font.get_ascent() - 1.0, 0, 1)
-        #         array = pygame.surfarray.pixels3d(lsurf)
-        #         for j in (0, 1, 2):
-        #             array[:, :, j] = (
-        #                 (1.0 - m) * array[:, :, j] + m * gcolor[j]).astype(array.dtype)
-        #         del array
-        
-        if len(lsurfs) == 1 and gcolor is None:
-            surf = lsurfs[0]
-        else:
-            w = max(lsurf.get_bounding_rect().width for lsurf in lsurfs)
-            ys = [int(round(k * lsurfs[k].get_bounding_rect().height)) for k in range(len(lsurfs))]
-            h = ys[-1] + lsurfs[-1].get_bounding_rect().height
-            surf = pygame.Surface((w, h)).convert_alpha()
-            surf.fill(background or (0, 0, 0, 0))
-            for y, lsurf in zip(ys, lsurfs):
-                x = int(round(align * (w - lsurf.get_bounding_rect().width)))
-                surf.blit(lsurf, (x, y))
-    if cache:
-        w, h = list(map(int, surf.get_size()))
-        _surf_size_total += 4 * w * h
-        _surf_cache[key] = surf
-        _surf_tick_usage[key] = _tick
-        _tick += 1
-    return surf
-
-
-_default_surf_sentinel = ()
 
 class Ptext:
     def draw(self, text, pos=None,
@@ -669,15 +421,12 @@ class Ptext:
             topleft=None, bottomleft=None, topright=None, bottomright=None,
             midtop=None, midleft=None, midbottom=None, midright=None,
             center=None, centerx=None, centery=None,
-            width=None,	widthem=None, lineheight=None, strip=None,
             align=None,
-            owidth=None, ocolor=None,
             shadow=None, scolor=None,
-            gcolor=None,
             alpha=1.0,
             anchor=None,
             angle=0,
-            surf=_default_surf_sentinel,
+            surf=None,
             cache=True):
 
         if topleft:
@@ -724,11 +473,13 @@ class Ptext:
             hanchor = DEFAULT_ANCHOR[0]
         if vanchor is None:
             vanchor = DEFAULT_ANCHOR[1]
+        
+        font = getfont(fontname, fontsize, sysfontname, bold, italic, underline)
+        if background is not None:
+            tsurf = font.render(text, antialias, _resolvecolor(color, 'white'), background)
+        else:
+            tsurf = font.render(text, antialias, _resolvecolor(color, 'white'))
 
-        tsurf = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline, width, widthem,
-                        strip, color, background, antialias, ocolor, owidth, scolor, shadow, gcolor, alpha, align,
-                        lineheight, angle, cache)
-        angle = _resolveangle(angle)
         if angle:
             w0, h0 = _unrotated_size[(tsurf.get_size(), angle, text)]
             S, C = sin(radians(angle)), cos(radians(angle))
@@ -741,32 +492,10 @@ class Ptext:
         x = int(round(x))
         y = int(round(y))
 
-        if surf is _default_surf_sentinel:
-            surf = pygame.display.get_surface()
-        if surf is not None:
-            surf.blit(tsurf, (x, y))
-
-        if AUTO_CLEAN:
-            clean()
-
-        return tsurf, (x, y)
+        surf.blit(tsurf, (x, y))
 
 ptext = Ptext()
 
-def clean():
-    global _surf_size_total
-    memory_limit = MEMORY_LIMIT_MB * (1 << 20)
-    if _surf_size_total < memory_limit:
-        return
-    memory_limit *= MEMORY_REDUCTION_FACTOR
-    keys = sorted(_surf_cache, key=_surf_tick_usage.get)
-    for key in keys:
-        w, h = list(map(int,_surf_cache[key].get_size()))
-        del _surf_cache[key]
-        del _surf_tick_usage[key]
-        _surf_size_total -= 4 * w * h
-        if _surf_size_total < memory_limit:
-            break
 # ================================================= CALLBACK WRAPPER ===========================================================================
 
 
@@ -916,7 +645,8 @@ COLORS = {
     'black': (0, 0, 0),
     'green': (0, 255, 0),
     'yellow': (255,255,0),
-    'blue': (0, 0, 255)
+    'blue': (0, 0, 255),
+    'orange': (255, 69, 0)
 }
 
 def convert_hex_color(hex_color):
@@ -2190,156 +1920,306 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ===================================================================
+import random, math
 
-WIDTH = sx = 854
-HEIGHT = sy = 480
-TITLE = "Clooky Clunker"
+"""
+Pi Lander
+ * A basic Lunar Lander style game in Pygame Zero
+ * Run with 'pgzrun pi_lander.py', control with the LEFT, RIGHT and UP arrow keys
+ * Author Tim Martin: www.Tim-Martin.co.uk
+ * Licence: Creative Commons Attribution-ShareAlike 4.0 International
+ * http://creativecommons.org/licenses/by-sa/4.0/
+"""
 
-score, totalscore, clunkers = 0, 0, 0
-nextgoal = 0
-tgoal = -100
-clunks = []
-tbuy, buytext = -100, ""
-t = 0
+WIDTH = 800 # Screen width
+HEIGHT = 600 # Screen height
 
-buttonrects = [Rect(*(50, 120 + 85 * j, 180, 70)) for j in range(4)]
-buttonnames = ["auto-clunker", "clunkutron",
-               "turbo enclunkulator", "clunx capacitor"]
-buttoncosts = [10, 400, 12000, 250000]
+class LandingSpotClass:
+    """ Each instance defines a landing spot by where it starts, how big it is and how many points it's worth """
+    landing_spot_sizes = ["small", "medium", "large"]
+    def __init__(self, starting_step):
+        self.starting = starting_step
+        random_size = random.choice(LandingSpotClass.landing_spot_sizes) # And randomly choose size
+        if random_size == "small":
+            self.size = 4
+            self.bonus = 8
+        elif random_size == "medium":
+            self.size = 10
+            self.bonus = 4
+        else: # Large
+            self.size = 20
+            self.bonus = 2
+    def get_within_landing_spot(self, step):
+        if (step >= self.starting) and (step < self.starting + self.size):
+            return True
+        return False
 
+class LandscapeClass:
+    """ Stores and generates the landscape, landing spots and star field """
+    step_size = 3 # Landscape is broken down into steps. Define number of pixels on the x axis per step.
+    world_steps = int(WIDTH/step_size) # How many steps can we fit horizontally on the screen
+    small_height_change = 3 # Controls how bumpy the landscape is
+    large_height_change = 10 # Controls how steep the landscape is
+    features = ["mountain","valley","field"] # What features to generate
+    n_stars = 30 # How many stars to put in the background
+    n_spots = 4 # Max number of landing spots to generate
+    def __init__(self):
+        self.world_height = [] # Holds the height of the landscape at each step
+        self.star_locations = [] # Holds the x and y location of the stars
+        self.landing_spots = [] # Holds the landing spots
+    def get_within_landing_spot(self, step):
+        """ Calculate if a given step is within any of the landing spots """
+        for spot in self.landing_spots:
+            if spot.get_within_landing_spot(step) == True:
+                return True
+        return False
+    def get_landing_spot_bonus(self, step):
+        for spot in self.landing_spots:
+            if spot.get_within_landing_spot(step) == True:
+                return spot.bonus
+        return 0
+    def reset(self):
+        """ Generates a new landscape """
+        # First: Choose which steps of the landscape will be landing spots
+        del self.landing_spots[:] # Delete any previous LandingSpotClass objects
+        next_spot_start = 0
+        # Move from left to right adding new landing spots until either
+        # n_spots spots have been placed or we run out of space in the world
+        while len(self.landing_spots) < LandscapeClass.n_spots and next_spot_start < LandscapeClass.world_steps:
+            next_spot_start += random.randint(10, 50) # Randomly choose location to start landing spot
+            new_landing_spot = LandingSpotClass(next_spot_start) # Make a new landing object at this spot
+            self.landing_spots.append( new_landing_spot ) # And store it in our list
+            next_spot_start += new_landing_spot.size # Then take into account its size before choosing the next
+        # Second: Randomise the world map
+        del self.world_height[:] # Clear any previous world height data
+        feature_steps = 0 # Keep track of how many steps we are into a feature
+        self.world_height.append(random.randint(300, 500)) # Start the landscape between 300 and 500 pixels down
+        for step in range(1, LandscapeClass.world_steps):
+            # If feature_step is zero, we need to choose a new feature and how long it goes on for
+            if feature_steps == 0:
+                feature_steps = random.randint(25, 75)
+                current_feature = random.choice(LandscapeClass.features)
+            # Generate the world by setting the range of random numbers, must be flat if in a landing spot
+            if self.get_within_landing_spot(step) == True:
+                max_up = 0 # Flat
+                max_down = 0 # Flat
+            elif current_feature == "mountain":
+                max_up = LandscapeClass.small_height_change
+                max_down = -LandscapeClass.large_height_change
+            elif current_feature == "valley":
+                max_up = LandscapeClass.large_height_change
+                max_down = -LandscapeClass.small_height_change
+            elif current_feature == "field":
+                max_up = LandscapeClass.small_height_change
+                max_down = -LandscapeClass.small_height_change
+            # Generate the next piece of the landscape
+            current_height = self.world_height[step-1]
+            next_height = current_height + random.randint(max_down, max_up)
+            self.world_height.append(next_height)
+            feature_steps -= 1
+            # Stop mountains getting too high, or valleys too low
+            if next_height > 570:
+                current_feature = "mountain" # Too low! Force a mountain
+            elif next_height < 200:
+                current_feature = "valley" # Too high! Force a valley
+        # Third: Randomise the star field
+        del self.star_locations[:]
+        for star in range(0, LandscapeClass.n_stars):
+            star_step = random.randint(0, LandscapeClass.world_steps-1)
+            star_x = star_step * LandscapeClass.step_size
+            star_y = random.randint( 0, self.world_height[star_step] ) # Keep the stars above the landscape
+            self.star_locations.append( (star_x, star_y) )
 
-def on_key_down(key):
-    if key == keys.ESCAPE:
-        exit()
+class ShipClass:
+    """ Holds the state of the player's ship and handles movement """
+    max_fuel = 1000 # How much fuel the player starts with
+    booster_power = 0.05 # Power of the ship's thrusters
+    rotate_speed = 10 # How fast the ship rotates in degrees per frame
+    gravity = [0., 0.01] # Strength of gravity in the x and y directions
+    def __init__(self):
+        """ Create the variables which will describe the players ship """
+        self.angle = 0 # The angle the ship is facing 0 - 360 degrees
+        self.altitude = 0 # The number of pixels the ship is above the ground
+        self.booster = False # True if the player is firing their booster
+        self.fuel = 0 # Amount of fuel remaining
+        self.position = [0,0] # The x and y coordinates of the players ship
+        self.velocity = [0,0] # The x and y velocity of the players ship
+        self.acceleration = [0,0] # The x and y acceleration of the players ship
+    def reset(self):
+        """ Set the ships position, velocity and angle to their new-game values """
+        self.position = [750., 100.] # Always start at the same spot
+        self.velocity = [ -random.random(), random.random() ] # But with some initial speed
+        self.acceleration = [0., 0.] # No initial acceleration (except gravity of course)
+        self.angle = random.randint(0, 360) # And pointing in a random direction
+        self.fuel = ShipClass.max_fuel # Fill up fuel tanks
+    def rotate(self, direction):
+        """ Rotate the players ship and keep the angle within the range 0 - 360 degrees """
+        if direction == "left":
+            self.angle -= ShipClass.rotate_speed
+        elif direction == "right":
+            self.angle += ShipClass.rotate_speed
+        if self.angle > 360: # Remember than adding or subtracting 360 degrees does not change the angle
+            self.angle -= 360
+        elif self.angle < 0:
+            self.angle += 360
+    def booster_on(self):
+        """ When booster is firing we accelerate in the opposite direction, 180 degrees, from the way the ship is facing """
+        self.booster = True
+        self.acceleration[0] = ShipClass.booster_power * math.sin( math.radians(self.angle + 180) )
+        self.acceleration[1] = ShipClass.booster_power * math.cos( math.radians(self.angle + 180) )
+        self.fuel -= 2
+    def booster_off(self):
+        """ When the booster is not firing we do not accelerate """
+        self.booster = False
+        self.acceleration[0] = 0.
+        self.acceleration[1] = 0.
+    def update_physics(self):
+        """ Update ship physics in X and Y, apply acceleration (and gravity) to the velocity and velocity to the position """
+        for axis in range(0,2):
+            self.velocity[axis] += ShipClass.gravity[axis]
+            self.velocity[axis] += self.acceleration[axis]
+            self.position[axis] += self.velocity[axis]
+        # Update player altitude. Note that (LanscapeClass.step_size * 3) is the length of the ship's legs
+        ship_step = int(self.position[0]/LandscapeClass.step_size)
+        if ship_step < LandscapeClass.world_steps:
+            self.altitude = game.landscape.world_height[ship_step] - self.position[1] - (LandscapeClass.step_size * 3)
+    def get_out_of_bounds(self):
+        """ Check if the player has hit the ground or gone off the sides """
+        if self.altitude <= 0 or self.position[0] <= 0 or self.position[0] >= WIDTH:
+            return True
+        return False
 
+class GameClass:
+    """ Holds main game data, including the ship and landscape objects. Checks for game-over """
+    def __init__(self):
+        self.time = 0. # Time spent playing in seconds
+        self.score = 0 # Player's score
+        self.game_speed = 30 # How fast the game should run in frames per second
+        self.time_elapsed = 0. # Time since the last frame was changed
+        self.blink = True # True if blinking text is to be shown
+        self.n_frames = 0 # Number of frames processed
+        self.game_on = False # True if the game is being played
+        self.game_message = "PI   LANDER\nPRESS SPACE TO START" # Start of game message
+        self.ship = ShipClass() # Make a object of the ShipClass type
+        self.landscape = LandscapeClass()
+        self.reset() # Start the game with a fresh landscape and ship
+    def reset(self):
+        self.time = 0.
+        self.ship.reset()
+        self.landscape.reset()
+    def check_game_over(self):
+        """ Check if the game is over and update the game state if so """
+        if self.ship.get_out_of_bounds() == False:
+            return # Game is not over
+        self.game_on = False # Game has finished. But did we win or loose?
+        # Check if the player looses. This is if the ship's angle is > 20 degrees
+        # the ship is not over a landing site, is moving too fast or is off the side of the screen
+        ship_step = int(self.ship.position[0]/LandscapeClass.step_size)
+        if self.ship.position[0] <= 0 \
+           or self.ship.position[0] >= WIDTH \
+           or self.landscape.get_within_landing_spot(ship_step) == False \
+           or abs(self.ship.velocity[0]) > .5 \
+           or abs(self.ship.velocity[1]) > .5 \
+           or (self.ship.angle > 20 and self.ship.angle < 340):
+            self.game_message = "YOU JUST DESTROYED A 100 MEGABUCK LANDER\n\nLOOSE 250 POINTS\n\nPRESS SPACE TO RESTART"
+            self.score -= 250
+        else: # If the player has won! Update their score based on the amount of remaining fuel and the landing bonus
+            points = self.ship.fuel / 10
+            points *= self.landscape.get_landing_spot_bonus(ship_step)
+            self.score += points
+            self.game_message = "CONGRATULATIONS\nTHAT WAS A GREAT LANDING!\n\n" + str(round(points)) + " POINTS\n\nPRESS SPACE TO RESTART"
 
-def on_mouse_down(button, pos):
-    global score, totalscore, clunkers, tbuy, buytext
-    if button != 1:
-        return
-
-    x, y = pos
-    # Click on the central circle
-    if (x - sx / 2) ** 2 + (y - sy / 2) ** 2 < 100 ** 2:
-        score += 1
-        totalscore += 1
-        # Add a "clunk" indicator at a pseudorandom place near the center
-        ix = sx / 2 + 12345678910. / (1 + t) % 1 * 200 - 100
-        iy = sy / 2 + 45678910123. / (1 + t) % 1 * 200 - 100
-        clunks.append((t, ix, iy))
-
-    # Click on one of the buttons
-    for j in range(len(buttonrects)):
-        rect, cost = buttonrects[j], buttoncosts[j]
-        if rect.collidepoint(x, y) and score >= cost:
-            score -= cost
-            clunkers += 10 ** j
-            tbuy = t
-            buytext = "+%s clunk/s" % (10 ** j)
-            buttoncosts[j] += int(round(cost * 0.2))
-
-
-def update(dt):
-    global t
-    global score, totalscore, goaltext, tgoal, nextgoal
-    t += dt
-    score += clunkers * dt
-    totalscore += clunkers * dt
-
-    # Check for next achievement
-    if totalscore > 100 * (1 << nextgoal):
-        goaltext = "Achievement unlocked:\nCL%sKY!" % ("O" * (nextgoal + 2))
-        tgoal = t
-        nextgoal += 1
-
-    clunks[:] = [c for c in clunks if t - c[0] < 1]
-
+# Create the game object
+game = GameClass()
 
 def draw():
-    screen.fill((0, 30, 30))
+    """
+    Draw the game window on the screen in the following order:
+    start message, mountain range, bonus points, stars, statistics, player's ship
+    """
+    screen.fill("black")
+    size = LandscapeClass.step_size
 
-    # Draw the circle in the middle
-    screen.draw.filled_circle((sx // 2, sy // 2), 106, 'black')
-    screen.draw.filled_circle((sx // 2, sy // 2), 100, '#884400')
+    if game.game_on == False:
+        screen.draw.text(game.game_message, center=(WIDTH/2, HEIGHT/5), align="center")
 
-    # Draw the buttons using screen.draw.textbox
-    for rect, name, cost in zip(buttonrects, buttonnames, buttoncosts):
-        screen.draw.filled_rect(rect, "#553300")
-        screen.draw.filled_rect(rect.inflate(-8, -8), "#332200")
+    # Get the x and y coordinates of each step of the landscape and draw it as a straight line
+    for step in range(0, game.landscape.world_steps - 1):
+        x_start = size * step
+        x_end   = size * (step + 1)
+        y_start = game.landscape.world_height[step]
+        y_end   = game.landscape.world_height[step + 1]
+        screen.draw.line( (x_start, y_start), (x_end, y_end), "white" )
+        # Every second we flash the landing spots with a thicker line by drawing a narrow rectangle
+        if (game.blink == True or game.game_on == False) and game.landscape.get_within_landing_spot(step) == True:
+            screen.draw.filled_rect( Rect(x_start-size, y_start-1, size, 3), "white" )
 
-    # Draw the HUD
-    hudtext = "\n".join([
-        "time played: %d" % t,
-        "clunks: %d" % score,
-        "all-time clunks: %d" % totalscore,
-        "clunks per second: %d" % clunkers,
-    ])
-    screen.draw.text(hudtext,
-        right=sx - 10,
-        top=120,
-        fontname="roboto_condensed",
-        fontsize=32,
-        color=(0, 200, 0),
-        scolor=(0, 50, 0),
-        shadow=(-1, 1),
-        lineheight=1.3
-    )
+    # Draw the bonus point notifier
+    if game.blink == True or game.game_on == False:
+        for spot in game.landscape.landing_spots:
+            x_text = spot.starting * size
+            y_text = game.landscape.world_height[ spot.starting ] + 10 # The extra 10 pixels puts the text below the landscape
+            screen.draw.text(str(spot.bonus) + "x", (x_text,y_text), color="white")
 
-    # Draw the title using a gradient
-    screen.draw.text(
-        "Clooky Clunker",
-        midtop=(sx / 2, 10),
-        fontname="cherrycreamsoda",
-        fontsize=64,
-        owidth=1.2,
-        color="#884400",
-        gcolor="#442200"
-    )
+    # Draw the stars
+    for star in game.landscape.star_locations:
+        screen.draw.line( star, star, "white" )
 
-    # Draw "clunk" indicators
-    for it, ix, iy in clunks:
-        dt = t - it
-        pos = ix, iy - 60 * dt
-        screen.draw.text(
-            "clunk",
-            center=pos,
-            fontname=None,
-            fontsize=28,
-            alpha=1 - dt,
-            shadow=(1, 1)
-        )
+    # Draw the stats
+    screen.draw.text("SCORE: " + str(round(game.score)), (10,10), fontsize=14, color="white", background="black")
+    screen.draw.text("TIME: " + str(round(game.time)), (10,25), fontsize=14, color="white", background="black")
+    screen.draw.text("FUEL: " + str(game.ship.fuel), (10,40), fontsize=14, color="white", background="black")
+    screen.draw.text("ALTITUDE: " + str(round(game.ship.altitude)), (WIDTH-230,10), fontsize=14, color="white", background="black")
+    screen.draw.text("HORIZONTAL SPEED: {0:.2f}".format(game.ship.velocity[0]), (WIDTH-230,25), fontsize=14, color="white", background="black")
+    screen.draw.text("VERTICAL SPEED: {0:.2f}".format(-game.ship.velocity[1]), (WIDTH-230,40), fontsize=14, color="white", background="black")
 
-    # Draw purchase indicator
-    if t - tbuy < 1:
-        dt = t - tbuy
-        pos = sx / 2, sy / 2
-        fontsize = 32 * (1 + 60 * dt) ** 0.2
-        screen.draw.text(
-            buytext, pos,
-            anchor=(0.5, 0.9),
-            fontname="bubblegum_sans",
-            fontsize=fontsize,
-            alpha=1 - dt,
-            shadow=(1, 1)
-        )
+    screen.draw.circle( game.ship.position, size*2, "yellow" ) # Draw the player
+    # Use sin and cosine functions to draw the ship legs and booster at the correct angle
+    # Requires the values in radians (0 to 2*pi) rather than in degrees (0 to 360)
+    sin_angle = math.sin( math.radians(game.ship.angle - 45) ) # Legs are drawn 45 degrees either side of the ship's angle
+    cos_angle = math.cos( math.radians(game.ship.angle - 45) )
+    screen.draw.line( game.ship.position, (game.ship.position[0] + (sin_angle*size*3), game.ship.position[1] + (cos_angle*size*3)), "yellow" )
+    sin_angle = math.sin( math.radians(game.ship.angle + 45) )
+    cos_angle = math.cos( math.radians(game.ship.angle + 45) )
+    screen.draw.line( game.ship.position, (game.ship.position[0] + (sin_angle*size*3), game.ship.position[1] + (cos_angle*size*3)), "yellow" )
+    if game.ship.booster == True:
+        sin_angle = math.sin( math.radians(game.ship.angle) ) # Booster is drawn at the same angle as the ship, just under it
+        cos_angle = math.cos( math.radians(game.ship.angle) )
+        screen.draw.filled_circle( (game.ship.position[0] + (sin_angle*size*3), game.ship.position[1] + (cos_angle*size*3)), size, "orange" )
 
-    # Draw achievement unlocked text (text is centered even though we specify
-    # bottom right).
-    if t - tgoal < 2:
-        alpha = min(2 - (t - tgoal), 1)
-        screen.draw.text(
-            goaltext,
-            fontname="boogaloo",
-            fontsize=48,
-            bottom=sy - 20,
-            right=sx - 40,
-            color="#AAAAFF",
-            gcolor="#4444AA",
-            shadow=(1.5, 1.5),
-            alpha=alpha,
-            align="center"
-        )
+def update(detlatime):
+    """ Updates the game physics 30 times every second  """
+    game.time_elapsed += detlatime
+    if game.time_elapsed < 1./game.game_speed:
+        return # A 30th of a second has not passed yet
+    game.time_elapsed -= 1./game.game_speed
 
+    # New frame - do all the simulations
+    game.n_frames += 1
+    if game.n_frames % game.game_speed == 0: # If n_frames is an exact multiple of the game FPS: so once per second
+        game.blink = not game.blink # Invert blink so True becomes False or False becomes True
+
+    # Start the game if the player presses space when the game is not on
+    if keyboard.space and game.game_on == False:
+        game.game_on = True
+        game.reset()
+    elif game.game_on == False:
+        return
+
+    # If the game is on, update the movement and the physics
+    if keyboard.left: # Change space ship rotation
+        game.ship.rotate("left")
+    elif keyboard.right:
+        game.ship.rotate("right")
+
+    if keyboard.up and game.ship.fuel > 0: # Fire boosters if the player has enough fuel
+        game.ship.booster_on()
+    else:
+        game.ship.booster_off()
+
+    game.time += detlatime
+    game.ship.update_physics()
+    game.check_game_over()
 # ========================================== MAIN LOOP ========================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

@@ -182,10 +182,7 @@ AUTO_CLEAN = True
 MEMORY_LIMIT_MB = 64
 MEMORY_REDUCTION_FACTOR = 0.5
 
-
-_font_cache = {}
-
-# =====================================OPERATOR STUFF==================================================================
+# ===================================== OPERATOR IMPLEMENTATION ==================================================================
 
 
 class itemgetter:
@@ -248,7 +245,7 @@ class attrgetter:
     def __reduce__(self):
         return self.__class__, self._attrs
 
-# =====================================HEAPQ PARTIAL IMPLEMENTATION==============================================================
+# ===================================== HEAPQ PARTIAL IMPLEMENTATION ==============================================================
 
 
 class HeapqPartial:
@@ -317,7 +314,7 @@ class HeapqPartial:
 
 
 heapq = HeapqPartial()
-# ===================================================LOADERS REFACTORED====================================================================
+# =================================================== IMAGE LOADER WRAPPER ====================================================================
 
 
 class ImageLoader:
@@ -365,6 +362,9 @@ class ImageLoader:
 
 images = ImageLoader()
 
+# ============================================== TEXT WRAPPAER ====================================================================================
+
+_font_cache = {}
 
 def getfont(fontname=None, fontsize=None, sysfontname=None,
             bold=None, italic=None, underline=None):
@@ -460,7 +460,6 @@ def wrap(text, fontname=None, fontsize=None, sysfontname=None,
         if text:
             lines.append(line)
     return lines
-
 
 _fit_cache = {}
 
@@ -815,6 +814,9 @@ def clean():
             break
 
 
+# ================================================= CALLBACK WRAPPER ===========================================================================
+
+
 def mkref(o):
     return lambda: o
 
@@ -941,6 +943,7 @@ class Clock:
             except Exception:
                 self.unschedule(cb)
 
+# ==================================================== SCREEN/SURFACE WRAPPERS ===================================================================
 
 def round_pos(pos):
     """Round a tuple position so it can be used for drawing."""
@@ -1095,7 +1098,7 @@ class Screen:
         return "<Screen width={} height={}>".format(self.width, self.height)
 
 
-
+# ================================================= KEYBOARD/KEYS WRAPPER =======================================================
 
 class Keyboard:
     """The current state of the keyboard.
@@ -1145,6 +1148,8 @@ class Keys:
 
 keyboard = Keyboard()
 keys = Keys()
+
+# ================================================= ACTOR WRAPPER ===============================================================================
 
 class Rect(pygame.Rect):
     __slots__ = ()
@@ -1228,7 +1233,6 @@ class ZRect:
         # that attribute, calling it first if it's callable
         #
         if hasattr(arg, "rect"):
-            raise str(arg)
             rectobj = arg.rect
             if callable(rectobj):
                 rectobj = rectobj()
@@ -1753,8 +1757,7 @@ class Actor:
         elif attr in dir(self):
             return getattr(self._rect, attr)
         else:
-            raise AttributeError('error')
-            # return object.__getattribute__(self, attr)
+            raise AttributeError('Attribute {} does not exist'.format(attr))
 
     def __setattr__(self, attr, value):
         """Assign rect attributes to the underlying rect."""
@@ -1965,7 +1968,7 @@ class Actor:
     def unload_image(self):
         images.unload(self._image_name)
 
-
+# ============================================================= ANIMATION ==============================================================
 
 def linear(n):
     return n
@@ -2078,7 +2081,6 @@ TWEEN_FUNCTIONS = {
     'bounce_end': bounce_end,
     'bounce_start': bounce_start,
     'bounce_start_end': bounce_start_end
-
 }
 
 class Animation:
@@ -2187,6 +2189,8 @@ def animate(object, tween='linear', duration=1, on_finished=None, **targets):
                      **targets)
 
 
+# ====================================================== GENERICS =============================================================
+
 def exit(e):
     if e.type == pygame.QUIT:
         pygame.quit()
@@ -2220,7 +2224,6 @@ def on_key_up(key):
     pass
 
 
-
 def init():
     pygame.init()
     screen = pygame.display.set_mode((1, 1))
@@ -2228,10 +2231,9 @@ def init():
     clock = pygame.time.Clock()
     return screen, clock
 
+
 TITLE = 'UNTITLED'
-
 screen, clock_pg = init()
-
 clock = Clock()
 tick = clock.tick
 schedule = clock.schedule
@@ -2239,108 +2241,9 @@ schedule_interval = clock.schedule_interval
 schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
-# ========================================= TESTING AREA ==============================================================
-import random
+# ========================================= TESTING AREA ===================================================================
 
-
-TITLE = 'Flappy Bird'
-WIDTH = 400
-HEIGHT = 708
-
-# These constants control the difficulty of the game
-GAP = 130
-GRAVITY = 0.3
-FLAP_STRENGTH = 6.5
-SPEED = 3
-
-bird = Actor('bird1', (75, 200))
-
-
-bird.dead = False
-bird.score = 0
-bird.vy = 0
-storage = {}
-storage['highscore'] = 0
-
-
-def reset_pipes():
-    pipe_gap_y = random.randint(200, HEIGHT - 200)
-    pipe_top.pos = (WIDTH, pipe_gap_y - GAP // 2)
-    pipe_bottom.pos = (WIDTH, pipe_gap_y + GAP // 2)
-
-
-pipe_top = Actor('top', anchor=('left', 'bottom'))
-pipe_bottom = Actor('bottom', anchor=('left', 'top'))
-reset_pipes()  # Set initial pipe positions.
-
-
-def update_pipes():
-    pipe_top.left -= SPEED
-    pipe_bottom.left -= SPEED
-    if pipe_top.right < 0:
-        reset_pipes()
-        if not bird.dead:
-            bird.score += 1
-            if bird.score > storage['highscore']:
-                storage['highscore'] = bird.score
-
-
-def update_bird():
-    uy = bird.vy
-    bird.vy += GRAVITY
-    bird.y += (uy + bird.vy) / 2
-    bird.x = 75
-
-    if not bird.dead:
-        if bird.vy < -3:
-            bird.image = 'bird2'
-        else:
-            bird.image = 'bird1'
-
-    if bird.colliderect(pipe_top): #or bird.colliderect(pipe_bottom):
-        bird.dead = True
-        bird.image = 'birddead'
-
-    if not 0 < bird.y < 720:
-        bird.y = 200
-        bird.dead = False
-        bird.score = 0
-        bird.vy = 0
-        reset_pipes()
-
-
-def update(dt):
-    update_pipes()
-    update_bird()
-
-
-def on_key_down(key):
-    if not bird.dead:
-        bird.vy = -FLAP_STRENGTH
-
-
-def draw():
-    screen.blit('background', (0, 0))
-    pipe_top.draw()
-    pipe_bottom.draw()
-    bird.draw()
-    # screen.draw.text(
-    #     str(bird.score),
-    #     color='white',
-    #     midtop=(WIDTH // 2, 10),
-    #     fontsize=70,
-    #     shadow=(1, 1)
-    # )
-    # screen.draw.text(
-    #     "Best: {}".format(storage['highscore']),
-    #     color=(200, 170, 0),
-    #     midbottom=(WIDTH // 2, HEIGHT - 10),
-    #     fontsize=30,
-    #     shadow=(1, 1)
-    # )
-
-
-# ========================================== MAIN LOOP ==================================================================
+# ========================================== MAIN LOOP ========================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 screen = Screen(screen)

@@ -4,7 +4,7 @@ import pygame
 import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
-PLATFORM = False
+PLATFORM = True
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -604,9 +604,9 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
                         ocolor, owidth, scolor, shadow, gcolor=gcolor, align=align,
                         lineheight=lineheight, cache=cache)
         surf = surf0.copy()
-        # array = pygame.surfarray.pixels_alpha(surf)
-        # array[:, :] = (array[:, :] * alpha).astype(array.dtype)
-        # del array
+        array = pygame.surfarray.pixels_alpha(surf)
+        array[:, :] = (array[:, :] * alpha).astype(array.dtype)
+        del array
     elif spx is not None:
         surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
                         width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
@@ -621,14 +621,14 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
         dx, dy = max(sx, 0), max(sy, 0)
         surf.blit(ssurf, (dx, dy))
         x0, y0 = abs(sx) - dx, abs(sy) - dy
-        # if len(color) > 3 and color[3] == 0:
-        #     array = pygame.surfarray.pixels_alpha(surf)
-        #     array0 = pygame.surfarray.pixels_alpha(surf0)
-        #     array[x0:x0 + w0, y0:y0 +
-        #           h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
-        #     del array, array0
-        # else:
-        surf.blit(surf0, (x0, y0))
+        if len(color) > 3 and color[3] == 0:
+            array = pygame.surfarray.pixels_alpha(surf)
+            array0 = pygame.surfarray.pixels_alpha(surf0)
+            array[x0:x0 + w0, y0:y0 +
+                  h0] -= array0.clip(max=array[x0:x0 + w0, y0:y0 + h0])
+            del array, array0
+        else:
+            surf.blit(surf0, (x0, y0))
     elif opx is not None:
         surf0 = getsurf(text, fontname, fontsize, sysfontname, bold, italic, underline,
                         width, widthem, strip, color=color, background=(0, 0, 0, 0), antialias=antialias,
@@ -641,7 +641,14 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
         surf.fill(background or (0, 0, 0, 0))
         for dx, dy in _circlepoints(opx):
             surf.blit(osurf, (dx + opx, dy + opx))
-        surf.blit(surf0, (opx, opx))
+        if len(color) > 3 and color[3] == 0:
+            array = pygame.surfarray.pixels_alpha(surf)
+            array0 = pygame.surfarray.pixels_alpha(surf0)
+            array[opx:-opx, opx:-
+                  opx] -= array0.clip(max=array[opx:-opx, opx:-opx])
+            del array, array0
+        else:
+            surf.blit(surf0, (opx, opx))
     else:
         font = getfont(fontname, fontsize, sysfontname,
                        bold, italic, underline)
@@ -687,26 +694,25 @@ def getsurf(text, fontname=None, fontsize=None, sysfontname=None, bold=None, ita
 
 _default_surf_sentinel = ()
 
-
 class Ptext:
     def draw(self, text, pos=None,
-             fontname=None, fontsize=None, sysfontname=None,
-             antialias=True, bold=None, italic=None, underline=None,
-             color=None, background=None,
-             top=None, left=None, bottom=None, right=None,
-             topleft=None, bottomleft=None, topright=None, bottomright=None,
-             midtop=None, midleft=None, midbottom=None, midright=None,
-             center=None, centerx=None, centery=None,
-             width=None, twidthem=None, lineheight=None, strip=None,
-             align=None,
-             owidth=None, ocolor=None,
-             shadow=None, scolor=None,
-             gcolor=None,
-             alpha=1.0,
-             anchor=None,
-             angle=0,
-             surf=_default_surf_sentinel,
-             cache=True):
+            fontname=None, fontsize=None, sysfontname=None,
+            antialias=True, bold=None, italic=None, underline=None,
+            color=None, background=None,
+            top=None, left=None, bottom=None, right=None,
+            topleft=None, bottomleft=None, topright=None, bottomright=None,
+            midtop=None, midleft=None, midbottom=None, midright=None,
+            center=None, centerx=None, centery=None,
+            width=None,	widthem=None, lineheight=None, strip=None,
+            align=None,
+            owidth=None, ocolor=None,
+            shadow=None, scolor=None,
+            gcolor=None,
+            alpha=1.0,
+            anchor=None,
+            angle=0,
+            surf=_default_surf_sentinel,
+            cache=True):
 
         if topleft:
             left, top = topleft
@@ -792,11 +798,9 @@ class Ptext:
         fontsize = _fitsize(text, fontname, sysfontname, bold, italic, underline,
                             rect.width, rect.height, lineheight, strip)
         return self.draw(text, (x, y), fontname=fontname, fontsize=fontsize, lineheight=lineheight,
-                         width=rect.width, strip=strip, anchor=anchor, **kwargs)
-
+                    width=rect.width, strip=strip, anchor=anchor, **kwargs)
 
 ptext = Ptext()
-
 
 def clean():
     global _surf_size_total
@@ -812,8 +816,6 @@ def clean():
         _surf_size_total -= 4 * w * h
         if _surf_size_total < memory_limit:
             break
-
-
 # ================================================= CALLBACK WRAPPER ===========================================================================
 
 
@@ -2242,6 +2244,11 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ===================================================================
+WIDTH, HEIGHT = 500, 500
+
+def draw():
+    screen.fill('black')
+    screen.draw.text('HI', (150, 150))
 
 # ========================================== MAIN LOOP ========================================================================
 

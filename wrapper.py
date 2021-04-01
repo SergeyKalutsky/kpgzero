@@ -476,7 +476,7 @@ class Ptext:
         
         font = getfont(fontname, fontsize, sysfontname, bold, italic, underline)
         if background is not None:
-            tsurf = font.render(text, antialias, _resolvecolor(color, 'white'), background)
+            tsurf = font.render(text, antialias, _resolvecolor(color, 'white'), _resolvecolor(background, 'black'))
         else:
             tsurf = font.render(text, antialias, _resolvecolor(color, 'white'))
 
@@ -1923,25 +1923,42 @@ each_tick = clock.each_tick
 WIDTH, HEIGHT = 500, 500
 
 mouse_down = False
-
+indx, r = 1, 1
+colors = ['red', 'white', 'blue', 'yellow', 'green']
+color = colors[0]
 
 def on_mouse_down(button, pos):
-    global mouse_down
-    mouse_down = True
+    global mouse_down, indx, color
+    if button == 1:
+        mouse_down = True if not mouse_down else False
+    if button == 3:
+        color = colors[indx % 5]
+        indx += 1
+        screen.draw.text('Выбран цвет:  ' + color+'          ', 
+                         pos=(150, 10), 
+                         color='WHITE', 
+                         background='white')
 
-
-def on_mouse_up(button, pos):
-    global mouse_down
-    mouse_down = False
+def on_key_down(key):
+    global r
+    if key == keys.down:
+        r += -1 if r !=0 else 0
+        screen.draw.text('Размер пера:  ' + str(r) +'          ', 
+                         pos=(150, 10), 
+                         color='WHITE', 
+                         background='Black')
+    if key == keys.up:
+        r += 1 if r != 15 else 0
+        screen.draw.text('Размер пера:  ' + str(r) +'          ', 
+                         pos=(150, 10), 
+                         color='WHITE', 
+                         background='Black')
 
 
 def on_mouse_move(pos):
-    global mouse_down
-    print(mouse_down)
+    global mouse_down, color
     if mouse_down:
-        print('here')
-        screen.draw.set_at(pos, 'red')
-
+        screen.draw.filled_circle(pos, r, color)
 
 
 # ========================================== MAIN LOOP ========================================================================

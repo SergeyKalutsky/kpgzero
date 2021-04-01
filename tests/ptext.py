@@ -10,7 +10,7 @@ clunks = []
 tbuy, buytext = -100, ""
 t = 0
 
-buttonrects = [Rect((50, 120 + 85 * j, 180, 70)) for j in range(4)]
+buttonrects = [Rect(*(50, 120 + 85 * j, 180, 70)) for j in range(4)]
 buttonnames = ["auto-clunker", "clunkutron",
                "turbo enclunkulator", "clunx capacitor"]
 buttoncosts = [10, 400, 12000, 250000]
@@ -76,14 +76,6 @@ def draw():
         screen.draw.filled_rect(rect.inflate(-8, -8), "#332200")
         text = u"%s: %d\u00A0clunks" % (name, cost)
         color = "white" if cost <= score else "#666666"
-        box = rect.inflate(-16, -16)
-        screen.draw.textbox(
-            text, box,
-            fontname="bubblegum_sans",
-            lineheight=0.9,
-            color=color,
-            owidth=0.5
-        )
 
     # Draw the HUD
     hudtext = "\n".join([
@@ -100,7 +92,7 @@ def draw():
         color=(0, 200, 0),
         scolor=(0, 50, 0),
         shadow=(-1, 1),
-        lineheight=1.3
+        # lineheight=1.3
     )
 
     # Draw the title using a gradient
@@ -109,9 +101,9 @@ def draw():
         midtop=(sx / 2, 10),
         fontname="cherrycreamsoda",
         fontsize=64,
-        owidth=1.2,
+        # owidth=1.2,
         color="#884400",
-        gcolor="#442200"
+        # gcolor="#442200"
     )
 
     # Draw "clunk" indicators
@@ -124,7 +116,7 @@ def draw():
             fontname=None,
             fontsize=28,
             alpha=1 - dt,
-            shadow=(1, 1)
+            # shadow=(1, 1)
         )
 
     # Draw purchase indicator
@@ -138,7 +130,7 @@ def draw():
             fontname="bubblegum_sans",
             fontsize=fontsize,
             alpha=1 - dt,
-            shadow=(1, 1)
+            # shadow=(1, 1)
         )
 
     # Draw achievement unlocked text (text is centered even though we specify
@@ -152,7 +144,7 @@ def draw():
             bottom=sy - 20,
             right=sx - 40,
             color="#AAAAFF",
-            gcolor="#4444AA",
+            # gcolor="#4444AA",
             shadow=(1.5, 1.5),
             alpha=alpha,
             align="center"

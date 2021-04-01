@@ -1867,7 +1867,7 @@ def animate(object, tween='linear', duration=1, on_finished=None, **targets):
                      **targets)
 
 
-# ====================================================== GENERICS =============================================================
+# ====================================================== HOOKS =============================================================
 
 def exit(e):
     if e.type == pygame.QUIT:
@@ -1890,7 +1890,7 @@ def on_mouse_up(button, pos):
     pass
 
 
-def on_mouse_move():
+def on_mouse_move(pos):
     pass
 
 
@@ -1920,79 +1920,30 @@ schedule_unique = clock.schedule_unique
 unschedule = clock.unschedule
 each_tick = clock.each_tick
 # ========================================= TESTING AREA ===================================================================
-import random
+WIDTH, HEIGHT = 500, 500
 
-WIDTH = HEIGHT = 500
-
-lastTime = 0
-currentTime = 0
-hero = Actor('razorinv')
-hero.x, hero.y = WIDTH // 2, HEIGHT // 2
-
-enemies = []
-enemycd = 2
-
-# Пули
-bullets = []
-isShot = False
-t = 0
-lost = False
-
-def on_key_down(key):
-    global isShot
-    if key == keys.space:
-        isShot = True
+mouse_down = False
 
 
-def update(dt):
-    global lost, enemies, isShot, t, bullets
+def on_mouse_down(button, pos):
+    global mouse_down
+    mouse_down = True
 
-    for enemy in enemies:
-        if hero.colliderect(enemy):
-            lost = True
 
-    nenemies = [e for e in enemies if e.collidelist(bullets) == -1]
-    nbullets = [b for b in bullets if b.collidelist(enemies) == -1 and b.bottom > -5]
-    enemies, bullets = nenemies, nbullets
-    
-    if isShot:
-        bullets.append(Actor('bullet', pos=(hero.left + 33, hero.top + 5)))
-        isShot = False
+def on_mouse_up(button, pos):
+    global mouse_down
+    mouse_down = False
 
-    if t > enemycd:
-        x = random.randint(0, WIDTH)
-        enemies.append(Actor('invaderinv', pos=(x, 20)))
-        t = 0
 
-    if keyboard.left and hero.left > 0:
-        hero.left -= 5
-    if keyboard.right and hero.right < WIDTH:
-        hero.left += 5
-    if keyboard.up and hero.top > 0:
-        hero.top -= 5
-    if keyboard.down and hero.bottom < HEIGHT:
-        hero.top += 5
+def on_mouse_move(pos):
+    global mouse_down
+    print(mouse_down)
+    if mouse_down:
+        print('here')
+        screen.draw.set_at(pos, 'red')
 
-    t += dt
 
-def draw():
-    global lost
 
-    screen.fill('black')
-    if not lost:
-        hero.draw()
-        for bullet in bullets:
-            bullet.draw()
-            bullet.top -= 5
-        for enemy in enemies:
-            enemy.draw()
-            enemy.top += 2
-    else:
-        screen.draw.text('GAME OVER', 
-                         pos=(100, 200), 
-                         sysfontname='comic sans ms', 
-                         color='red',
-                         fontsize=50)
 # ========================================== MAIN LOOP ========================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -2007,10 +1958,14 @@ while True:
     clock.tick(dt)
     for event in pygame.event.get():
         exit(event)
+        pos = pygame.mouse.get_pos()
         if event.type == pygame.MOUSEBUTTONDOWN:
-            # Button press handler
-            pos = pygame.mouse.get_pos()
             on_mouse_down(event.button, pos)
+
+        if event.type == pygame.MOUSEMOTION:
+            on_mouse_move(pos)
+
+        if event.type == pygame.MOUSEBUTTONUP:
             on_mouse_up(event.button, pos)
 
         if event.type == pygame.KEYDOWN:

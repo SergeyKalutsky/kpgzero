@@ -5,6 +5,7 @@ import time
 from math import radians, sin, cos, atan2, degrees, sqrt, ceil, pi
 
 PLATFORM = False
+
 ANCHORS = {
     'x': {
         'left': 0.0,
@@ -19,6 +20,17 @@ ANCHORS = {
         'bottom': 1.0,
     }
 }
+
+COLORS = {
+    'white': (255, 255, 255),
+    'red': (255, 0, 0),
+    'black': (0, 0, 0),
+    'green': (0, 255, 0),
+    'yellow': (255,255,0),
+    'blue': (0, 0, 255),
+    'orange': (255, 69, 0)
+}
+
 
 SYMBOLIC_POSITIONS = set((
     "topleft", "bottomleft", "topright", "bottomright",
@@ -639,15 +651,6 @@ def round_pos(pos):
     except TypeError:
         raise TypeError("Coordinate values must be numbers (not {!r})".format(pos)) 
 
-COLORS = {
-    'white': (255, 255, 255),
-    'red': (255, 0, 0),
-    'black': (0, 0, 0),
-    'green': (0, 255, 0),
-    'yellow': (255,255,0),
-    'blue': (0, 0, 255),
-    'orange': (255, 69, 0)
-}
 
 def convert_hex_color(hex_color):
     h = hex_color.lstrip('#')

@@ -1,7 +1,7 @@
 from random import randint
 
 
-def pos(size): 
+def get_pos(size): 
     return randint(0, size - FSIZE)
 
 WIDTH = 400
@@ -13,7 +13,7 @@ FSIZE = 20
 foodCounter = 0
 
 player = Rect(300, 100, 50, 50)
-foods = [Rect(pos(WIDTH), pos(HEIGHT), FSIZE, FSIZE) for _ in range(20)]
+foods = [Rect(get_pos(WIDTH), get_pos(HEIGHT), FSIZE, FSIZE) for _ in range(20)]
 
 SPEED = 10
 
@@ -23,7 +23,7 @@ def update(dt):
     foodCounter += 1
     if foodCounter >= NEWFOOD:
         foodCounter = 0
-        foods.append(Rect(pos(WIDTH), pos(HEIGHT), FSIZE, FSIZE))
+        foods.append(Rect(get_pos(WIDTH), get_pos(HEIGHT), FSIZE, FSIZE))
 
     if keyboard.left:
         player.left -= SPEED

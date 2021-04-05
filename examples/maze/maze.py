@@ -1,17 +1,3 @@
-"""Game to solve a randomly generated maze.
-
-Ideas for improvement:
-
-* Change maze colour every game
-* Randomize the position of the start and goal.
-* Add more collectibles, eg. coins.
-* Count the number of moves.
-* Generate more interesting mazes by biasing the algorithm. Instead of
-  `random.choice()`, try a weighted random choice, perhaps with higher weight
-  for horizontal moves, or going "straight ahead".
-
-"""
-
 from itertools import product
 import random
 

@@ -25,11 +25,11 @@ def update(dt):
         foodCounter = 0
         foods.append(Rect(get_pos(WIDTH), get_pos(HEIGHT), FSIZE, FSIZE))
 
-    if keyboard.left:
+    if keyboard.left and player.left > 0:
         player.left -= SPEED
     if keyboard.right and player.right < WIDTH:
         player.right += SPEED
-    if keyboard.up:
+    if keyboard.up and player.top > 0:
         player.top -= SPEED
     if keyboard.down and player.bottom < HEIGHT:
         player.top += SPEED

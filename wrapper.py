@@ -433,7 +433,7 @@ class Ptext:
             topleft=None, bottomleft=None, topright=None, bottomright=None,
             midtop=None, midleft=None, midbottom=None, midright=None,
             center=None, centerx=None, centery=None,
-            align=None, alpha=1.0, anchor=None, angle=0, surf=None, cache=True):
+            align=None, anchor=None, angle=0, surf=None):
 
         if topleft:
             left, top = topleft

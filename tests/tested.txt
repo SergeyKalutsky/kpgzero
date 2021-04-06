@@ -26,3 +26,5 @@ Clock
     each_tick
 
 Animation
+ImageLoader
+heapq

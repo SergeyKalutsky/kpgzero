@@ -1373,7 +1373,6 @@ def _set_opacity(actor, current_surface):
     alpha_img.blit(
         current_surface,
         (0, 0),
-        special_flags=pygame.BLEND_RGBA_MULT
     )
     return alpha_img
 

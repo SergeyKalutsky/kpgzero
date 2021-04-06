@@ -17,3 +17,10 @@ Screen
 Keyboard
 Keys
 Mouse
+
+Clock
+    schedule_unique
+    schedule_interval
+    unschedule
+    each_tick
+

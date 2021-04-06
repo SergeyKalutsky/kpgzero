@@ -170,29 +170,10 @@ ANCHOR_CENTER = None
 
 MAX_ALPHA = 255  # Based on pygame's max alpha.
 
-DEPRECATED_KEY_RE = re.compile(r'[A-Z]')
-PREFIX_RE = re.compile(r'^K_(?!\d$)')
-
 DEFAULT_FONT_SIZE = 24
-REFERENCE_FONT_SIZE = 100
-DEFAULT_LINE_HEIGHT = 1.0
 DEFAULT_FONT_NAME = None
 FONT_NAME_TEMPLATE = "%s.ttf "
-DEFAULT_COLOR = "white"
-DEFAULT_BACKGROUND = None
-DEFAULT_OUTLINE_COLOR = "black"
-DEFAULT_SHADOW_COLOR = "black"
-OUTLINE_UNIT = 1 / 24
-SHADOW_UNIT = 1 / 18
-DEFAULT_ALIGN = "left"  # left, center, or right
 DEFAULT_ANCHOR = 0, 0  # 0, 0 = top left ;  1, 1 = bottom right
-DEFAULT_STRIP = True
-ALPHA_RESOLUTION = 16
-ANGLE_RESOLUTION_DEGREES = 3
-
-AUTO_CLEAN = True
-MEMORY_LIMIT_MB = 64
-MEMORY_REDUCTION_FACTOR = 0.5
 
 # ===================================== OPERATOR IMPLEMENTATION ==================================================================
 

@@ -467,15 +467,8 @@ class Ptext:
         else:
             tsurf = font.render(text, antialias, _resolvecolor(color, 'white'))
 
-        if angle:
-            w0, h0 = _unrotated_size[(tsurf.get_size(), angle, text)]
-            S, C = sin(radians(angle)), cos(radians(angle))
-            dx, dy = (0.5 - hanchor) * w0, (0.5 - vanchor) * h0
-            x += dx * C + dy * S - 0.5 * tsurf.get_width()
-            y += -dx * S + dy * C - 0.5 * tsurf.get_height()
-        else:
-            x -= hanchor * tsurf.get_width()
-            y -= vanchor * tsurf.get_height()
+        x -= hanchor * tsurf.get_width()
+        y -= vanchor * tsurf.get_height()
         x = int(round(x))
         y = int(round(y))
 

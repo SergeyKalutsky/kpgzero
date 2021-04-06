@@ -20,6 +20,18 @@ y_enemy = 0 - CARHEIGHT
 x_enemy = random.choice([10, 130, 250])
 car_enemy.x, car_enemy.y = x_enemy, y_enemy
 
+def on_key_down(key):
+    global lost
+    if not lost:
+        if key == pygame.K_LEFT:
+            if car_hero.left > 10:
+                car_hero.left -= 120
+                
+        if key == pygame.K_RIGHT:
+            if car_hero.left < 250:
+                car_hero.left += 120
+            
+
 def update(dt):
     global SPEED, lost
     lost = car_hero.colliderect(car_enemy)
@@ -32,12 +44,6 @@ def update(dt):
             # Прибавление скорости
             car_enemy.top += SPEED
 
-        if keyboard.left:
-            if car_hero.left > -10:
-                car_hero.left -= 10
-        if keyboard.right:
-            if car_hero.left < 250:
-                car_hero.left += 10
 
 def draw():
     global lost
@@ -45,4 +51,7 @@ def draw():
     car_hero.draw()
     car_enemy.draw()
     if lost:
-        screen.draw.text('GAME OVER', pos=(80, 200), fontsize=35, color='RED')
+        screen.draw.text('GAME OVER', 
+                         pos=(80, 200), 
+                         fontsize=35, 
+                         color='RED')

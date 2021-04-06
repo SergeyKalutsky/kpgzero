@@ -1,7 +1,7 @@
 WIDTH, HEIGHT = 500, 500
 
-mouse_down, changed, minus = False, False, False
-indx, r, update_r = 1, 1, 1
+mouse_down, changed = False, False
+indx, r = 1, 1
 colors = ['red', 'white', 'blue', 'yellow', 'green']
 color = colors[0]
 
@@ -18,17 +18,13 @@ def on_mouse_down(button, pos):
                          color='black', 
                          background='white')
 
-
 def on_key_down(key):
-    global changed, r, minus
+    global r, changed
     if key == keys.down:
-        changed = True
-        minus = True
-        update_r = 1 if r !=0 else 0
-
+        r -= 1 if r !=0 else 0
     if key == keys.up:
-        changed = True
-        update_r = 1 if r != 15 else 0
+        r += 1 if r != 15 else 0
+    changed = True
 
 
 def on_mouse_move(pos):
@@ -38,16 +34,10 @@ def on_mouse_move(pos):
 
 
 def update(dt):
-    global changed, r, minus
+    global r, changed
     if changed:
-        if minus:
-            r -= update_r
-            minus = False
-        else:
-            r += update_r
         screen.draw.text('Размер пера:  ' + str(r) +'          ', 
-                         pos=(150, 10), 
-                         color='black', 
-                         background='white')
+                            pos=(150, 10), 
+                            color='black', 
+                            background='white')
         changed = False
-

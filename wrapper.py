@@ -1905,64 +1905,49 @@ each_tick = clock.each_tick
 
 FPS = 10
 # ========================================= TESTING AREA ===================================================================
-import pygame
-import random
+WIDTH, HEIGHT = 500, 500
 
-#Настройки окна
-WIDTH = 300
-HEIGHT = 500
-
-CARHEIGHT = 70
-SPEED = 2
+mouse_down, changed = False, False
+indx, r = 1, 1
+colors = ['red', 'white', 'blue', 'yellow', 'green']
+color = colors[0]
 
 
-CARHEIGHT = 70
-SPEED = 5
+def on_mouse_down(button, pos):
+    global mouse_down, indx, color
+    if button == 1:
+        mouse_down = True if not mouse_down else False
+    if button == 3:
+        color = colors[indx % 5]
+        indx += 1
+        screen.draw.text('Выбран цвет:  ' + color+'          ', 
+                         pos=(150, 10), 
+                         color='black', 
+                         background='white')
 
-car_hero = Actor('car')
-car_hero.x, car_hero.y = 150, 450
-
-car_enemy = Actor('carenemy')
-y_enemy = 0 - CARHEIGHT
-x_enemy = random.choice([10, 130, 250])
-car_enemy.x, car_enemy.y = x_enemy, y_enemy
-
-count = 0
 def on_key_down(key):
-    global count
-    if key == pygame.K_LEFT:
-        if car_hero.left > 10:
-            car_hero.left -= 120
-            
-    if key == pygame.K_RIGHT:
-        if car_hero.left < 250:
-            car_hero.left += 120
-            # count += 1
-            
+    global r, changed
+    if key == keys.down:
+        r -= 1 if r !=0 else 0
+    if key == keys.up:
+        r += 1 if r != 15 else 0
+    changed = True
+
+
+def on_mouse_move(pos):
+    global mouse_down, color
+    if mouse_down:
+        screen.draw.filled_circle(pos, r, color)
+
 
 def update(dt):
-    global SPEED, lost
-    lost = car_hero.colliderect(car_enemy)
-    if not lost:
-        if car_enemy.top >= HEIGHT + CARHEIGHT:
-            SPEED += 0.7
-            car_enemy.top = 0 - CARHEIGHT
-            car_enemy.left = random.choice([10, 130, 250])
-        else:
-            # Прибавление скорости
-            car_enemy.top += SPEED
-
-
-def draw():
-    global lost
-    screen.fill('white')
-    car_hero.draw()
-    car_enemy.draw()
-    if lost:
-        screen.draw.text('GAME OVER', 
-                         pos=(80, 200), 
-                         fontsize=35, 
-                         color='RED')
+    global r, changed
+    if changed:
+        screen.draw.text('Размер пера:  ' + str(r) +'          ', 
+                            pos=(150, 10), 
+                            color='black', 
+                            background='white')
+        changed = False
 
 # ========================================== MAIN LOOP ========================================================================
 

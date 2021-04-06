@@ -1905,26 +1905,64 @@ each_tick = clock.each_tick
 
 FPS = 10
 # ========================================= TESTING AREA ===================================================================
-WIDTH, HEIGHT = 500, 600
+import pygame
+import random
 
-alien = Actor('carenemy')
-x, y = 100, 100
+#Настройки окна
+WIDTH = 300
+HEIGHT = 500
+
+CARHEIGHT = 70
+SPEED = 2
+
+
+CARHEIGHT = 70
+SPEED = 5
+
+car_hero = Actor('car')
+car_hero.x, car_hero.y = 150, 450
+
+car_enemy = Actor('carenemy')
+y_enemy = 0 - CARHEIGHT
+x_enemy = random.choice([10, 130, 250])
+car_enemy.x, car_enemy.y = x_enemy, y_enemy
+
+count = 0
+def on_key_down(key):
+    global count
+    if key == pygame.K_LEFT:
+        if car_hero.left > 10:
+            car_hero.left -= 120
+            
+    if key == pygame.K_RIGHT:
+        if car_hero.left < 250:
+            car_hero.left += 120
+            # count += 1
+            
+
+def update(dt):
+    global SPEED, lost
+    lost = car_hero.colliderect(car_enemy)
+    if not lost:
+        if car_enemy.top >= HEIGHT + CARHEIGHT:
+            SPEED += 0.7
+            car_enemy.top = 0 - CARHEIGHT
+            car_enemy.left = random.choice([10, 130, 250])
+        else:
+            # Прибавление скорости
+            car_enemy.top += SPEED
+
 
 def draw():
-    screen.clear()
-    alien.draw()
-    
-def update(dt):
-    global x, y
-    alien.pos = x, y
-    alien.angle += 2
-    
-def on_key_down(key):
-    global x, y
-    if key == keys.DOWN:
-        y += 1
-        x += 1
-    
+    global lost
+    screen.fill('white')
+    car_hero.draw()
+    car_enemy.draw()
+    if lost:
+        screen.draw.text('GAME OVER', 
+                         pos=(80, 200), 
+                         fontsize=35, 
+                         color='RED')
 
 # ========================================== MAIN LOOP ========================================================================
 
@@ -1933,29 +1971,44 @@ screen = Screen(screen)
 pygame.display.set_caption(TITLE)
 
 while True:
+    # На hub баг, который хранит все предыдущие нажатия клавиш, и из-за этого некоторые евенты 
+    # происходят больше 1 раза. Временный фикс
+    happend = [False, False, False, False]
     dt = pygame.time.get_ticks() / 1000 - clock.t
     clock.tick(dt)
+    
     for event in pygame.event.get():
         exit(event)
         pos = pygame.mouse.get_pos()
+        
         if event.type == pygame.MOUSEBUTTONDOWN:
-            on_mouse_down(event.button, pos)
-
+            if not happend[0]:
+                on_mouse_down(event.button, pos)
+                happend[0] = True
+                
         if event.type == pygame.MOUSEMOTION:
             on_mouse_move(pos)
 
         if event.type == pygame.MOUSEBUTTONUP:
-            on_mouse_up(event.button, pos)
+            if not happend[1]:
+                on_mouse_up(event.button, pos)
+                happend = True
 
         if event.type == pygame.KEYDOWN:
             keyboard._press(event.key)
-            on_key_down(event.key)
+            if not happend[2]:
+                on_key_down(event.key)
+                happend[2] = True
 
-        elif event.type == pygame.KEYUP:
+        if event.type == pygame.KEYUP:
             keyboard._release(event.key)
-            on_key_up(event.key)
-
+            if not happend[3]:
+                on_key_up(event.key)
+                happend[3] = True
+    
+    
     update(dt)
     draw()
     pygame.display.update()
     clock_pg.tick(FPS)
+

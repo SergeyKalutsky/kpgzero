@@ -1,4 +1,3 @@
-
 TITLE = 'Flappy Ball'
 WIDTH = 800
 HEIGHT = 600

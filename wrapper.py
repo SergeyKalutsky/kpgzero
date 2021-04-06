@@ -175,7 +175,7 @@ DEFAULT_FONT_NAME = None
 FONT_NAME_TEMPLATE = "%s.ttf "
 DEFAULT_ANCHOR = 0, 0  # 0, 0 = top left ;  1, 1 = bottom right
 
-# ===================================== OPERATOR IMPLEMENTATION ==================================================================
+# ===================================== OPERATOR PARTIAL IMPLEMENTATION ==================================================================
 
 
 class itemgetter:
@@ -242,8 +242,6 @@ class attrgetter:
 
 
 class HeapqPartial:
-    # Код взят из https://github.com/python/cpython/blob/2d1cbe4193499914ccc9d217ea63eb17ff927c91/Lib/heapq.py#L258
-    # Поскольку heapq не портирован в Sculpt
     def heapify(self, x):
         """Transform list into a heap, in-place, in O(len(x)) time."""
         n = len(x)

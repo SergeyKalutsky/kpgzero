@@ -412,7 +412,7 @@ class Ptext:
             topleft=None, bottomleft=None, topright=None, bottomright=None,
             midtop=None, midleft=None, midbottom=None, midright=None,
             center=None, centerx=None, centery=None,
-            align=None, anchor=None, angle=0, surf=None):
+            align=None, anchor=None, angle=0, surf=None, **kwargs):
 
         if topleft:
             left, top = topleft

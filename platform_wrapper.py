@@ -1396,8 +1396,7 @@ class Actor:
                 "Only one 'topleft', 'topright' etc. argument is allowed."
             )
 
-        setter_name, position = symbolic_pos_dict.popitem(
-        ) if not PLATFORM else symbolic_pos_dict.items().pop()
+        setter_name, position = symbolic_pos_dict.items().pop()
         setattr(self, setter_name, position)
 
     def _update_transform(self, function):

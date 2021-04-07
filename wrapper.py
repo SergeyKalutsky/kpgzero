@@ -1905,50 +1905,54 @@ each_tick = clock.each_tick
 
 FPS = 10
 # ========================================= TESTING AREA ===================================================================
-WIDTH, HEIGHT = 500, 500
+import time
+import random
+checkmark = Actor('checkmark')
+steve = Actor('card_back', (50, 50))
+steve.topleft = (0, 0)
 
-mouse_down, changed = False, False
-indx, r = 1, 1
-colors = ['red', 'white', 'blue', 'yellow', 'green']
-color = colors[0]
+WIDTH = 800
+HEIGHT = 600
+COLS = 4
+ROWS = 3
+IMSIZE = 200
+STATUS = []        # cells that have been clicked on
+ignore = []        # cells that have been matches and are no longer in play
 
+START_IMAGES = ["im"+str(i+1) for i in range(COLS*ROWS//2)]*2
+random.shuffle(START_IMAGES)
 
-def on_mouse_down(button, pos):
-    global mouse_down, indx, color
-    if button == 1:
-        mouse_down = True if not mouse_down else False
-    if button == 3:
-        color = colors[indx % 5]
-        indx += 1
-        screen.draw.text('Выбран цвет:  ' + color+'          ', 
-                         pos=(150, 10), 
-                         color='black', 
-                         background='white')
-
-def on_key_down(key):
-    global r, changed
-    if key == keys.down:
-        r -= 1 if r !=0 else 0
-    if key == keys.up:
-        r += 1 if r != 15 else 0
-    changed = True
-
-
-def on_mouse_move(pos):
-    global mouse_down, color
-    if mouse_down:
-        screen.draw.filled_circle(pos, r, color)
+STATUS = []
+board = []                    # initialize the board
+for row in range(ROWS):
+    new_row = []
+    for col in range(COLS):
+        image_name = START_IMAGES.pop()
+        temp = Actor(image_name, (col*IMSIZE, row*IMSIZE))
+        temp.image_name = image_name  # used to verify matches
+        temp.topleft = (col*IMSIZE, row*IMSIZE)
+        new_row.append(temp)
+    board.append(new_row)
 
 
-def update(dt):
-    global r, changed
-    if changed:
-        screen.draw.text('Размер пера:  ' + str(r) +'          ', 
-                            pos=(150, 10), 
-                            color='black', 
-                            background='white')
-        changed = False
+def draw():                    # draw the board when pygame-zero says to
+    screen.clear()
+    for row in range(ROWS):
+        for col in range(COLS):
+            if (row, col) in ignore:    # already matched
+                checkmark.topleft = IMSIZE*col, IMSIZE*row
+                checkmark.draw()
+            elif (row, col) in STATUS:    # clicked this move: show face
+                board[row][col].draw()
+            else:                        # regular clickable card
+                steve.topleft = IMSIZE*col, IMSIZE*row
+                steve.draw()
 
+
+def findTile(pos):
+    y, x = pos
+    result = x // IMSIZE, y // IMSIZE
+    return result
 # ========================================== MAIN LOOP ========================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

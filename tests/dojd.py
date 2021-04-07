@@ -1,8 +1,7 @@
-import pgzrun
 from random import randint as rand
 
-WIDTH = 800
-HEIGHT = 600
+WIDTH = 500
+HEIGHT = 500
 
 N = 100
 R = 10
@@ -46,7 +45,7 @@ def sglaz():
                 xxx[q] += LUG
 
 
-def update():
+def update(dt):
     global zzz, veter, xxx
 
     if not (keyboard.SPACE):

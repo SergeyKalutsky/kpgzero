@@ -1,12 +1,11 @@
-
-
 import time
 import random
 checkmark = Actor('checkmark')
 steve = Actor('card_back', (50, 50))
 steve.topleft = (0, 0)
 
-
+WIDTH = 800
+HEIGHT = 600
 COLS = 4
 ROWS = 3
 IMSIZE = 200

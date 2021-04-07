@@ -77,7 +77,7 @@ def draw():
         else:
             screen.draw.text('Game Over', (100, 250), color=(0, 255, 0), fontsize=100)
 
-def update():
+def update(dt):
     global flag_0, ship, buls, aliens, bomb, flag_1, flag_3, t1, t2
     if flag_0:
         t2 = int((time()-t1)//1)

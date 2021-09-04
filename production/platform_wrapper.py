@@ -277,6 +277,8 @@ class ImageLoader:
                 pass
 
         if res is not None:
+            # add image to cache
+            self._cache[key] = res
             return res
         else:
             raise ValueError('Image ' + name + ' not found')

@@ -1449,7 +1449,8 @@ class Actor:
         ax, ay = self._untransformed_anchor
         p = self.pos
         self._anchor = transform_anchor(ax, ay, w, h, angle)
-        self.pos = p
+        # comment to rotating on center on Kodlanf platform (because another version of pygame)
+        # self.pos = p
         self._update_transform(_set_angle)
 
     @property

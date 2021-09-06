@@ -1716,6 +1716,8 @@ class Animation:
             self.stop(complete=True)
             if self.on_finished is not None:
                 self.on_finished()
+                # fix to bring animation on_finished
+                self.on_finished = None
             return
         n = self.function(n)
         for k in self.targets:

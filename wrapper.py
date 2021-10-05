@@ -1905,54 +1905,64 @@ each_tick = clock.each_tick
 
 FPS = 10
 # ========================================= TESTING AREA ===================================================================
-import time
+import pygame
 import random
-checkmark = Actor('checkmark')
-steve = Actor('card_back', (50, 50))
-steve.topleft = (0, 0)
 
-WIDTH = 800
-HEIGHT = 600
-COLS = 4
-ROWS = 3
-IMSIZE = 200
-STATUS = []        # cells that have been clicked on
-ignore = []        # cells that have been matches and are no longer in play
+#Настройки окна
+WIDTH = 300
+HEIGHT = 500
 
-START_IMAGES = ["im"+str(i+1) for i in range(COLS*ROWS//2)]*2
-random.shuffle(START_IMAGES)
-
-STATUS = []
-board = []                    # initialize the board
-for row in range(ROWS):
-    new_row = []
-    for col in range(COLS):
-        image_name = START_IMAGES.pop()
-        temp = Actor(image_name, (col*IMSIZE, row*IMSIZE))
-        temp.image_name = image_name  # used to verify matches
-        temp.topleft = (col*IMSIZE, row*IMSIZE)
-        new_row.append(temp)
-    board.append(new_row)
+CARHEIGHT = 70
+SPEED = 2
 
 
-def draw():                    # draw the board when pygame-zero says to
-    screen.clear()
-    for row in range(ROWS):
-        for col in range(COLS):
-            if (row, col) in ignore:    # already matched
-                checkmark.topleft = IMSIZE*col, IMSIZE*row
-                checkmark.draw()
-            elif (row, col) in STATUS:    # clicked this move: show face
-                board[row][col].draw()
-            else:                        # regular clickable card
-                steve.topleft = IMSIZE*col, IMSIZE*row
-                steve.draw()
+CARHEIGHT = 70
+SPEED = 5
+
+car_hero = Actor('car')
+car_hero.x, car_hero.y = 150, 450
+
+car_enemy = Actor('carenemy')
+y_enemy = 0 - CARHEIGHT
+x_enemy = random.choice([10, 130, 250])
+car_enemy.x, car_enemy.y = x_enemy, y_enemy
+
+def on_key_down(key):
+    global lost
+    if not lost:
+        if key == pygame.K_LEFT:
+            if car_hero.left > 10:
+                car_hero.left -= 120
+                
+        if key == pygame.K_RIGHT:
+            if car_hero.left < 250:
+                car_hero.left += 120
+            
+
+def update(dt):
+    global SPEED, lost
+    lost = car_hero.colliderect(car_enemy)
+    if not lost:
+        if car_enemy.top >= HEIGHT + CARHEIGHT:
+            SPEED += 0.7
+            car_enemy.top = 0 - CARHEIGHT
+            car_enemy.left = random.choice([10, 130, 250])
+        else:
+            # Прибавление скорости
+            car_enemy.top += SPEED
 
 
-def findTile(pos):
-    y, x = pos
-    result = x // IMSIZE, y // IMSIZE
-    return result
+def draw():
+    global lost
+    screen.fill('white')
+    car_hero.draw()
+    car_enemy.draw()
+    if lost:
+        screen.draw.text('GAME OVER', 
+                         pos=(80, 200), 
+                         fontsize=35, 
+                         color='RED')
+
 # ========================================== MAIN LOOP ========================================================================
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))

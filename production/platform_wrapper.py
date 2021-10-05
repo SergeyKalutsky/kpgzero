@@ -1861,7 +1861,7 @@ while True:
         if event.type == pygame.MOUSEBUTTONUP:
             if not happend[1]:
                 on_mouse_up(event.button, pos)
-                happend = True
+                happend[1] = True
 
         if event.type == pygame.KEYDOWN:
             keyboard._press(event.key)

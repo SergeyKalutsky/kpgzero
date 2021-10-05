@@ -1449,7 +1449,8 @@ class Actor:
         ax, ay = self._untransformed_anchor
         p = self.pos
         self._anchor = transform_anchor(ax, ay, w, h, angle)
-        self.pos = p
+        # comment to rotating on center on Kodlanf platform (because another version of pygame)
+        # self.pos = p
         self._update_transform(_set_angle)
 
     @property
@@ -1715,6 +1716,8 @@ class Animation:
             self.stop(complete=True)
             if self.on_finished is not None:
                 self.on_finished()
+                # fix to bring animation on_finished
+                self.on_finished = None
             return
         n = self.function(n)
         for k in self.targets:
